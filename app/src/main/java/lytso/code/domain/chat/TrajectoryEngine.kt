@@ -145,6 +145,14 @@ class TrajectoryEngine {
         _artifacts.value = emptyList()
     }
 
+    /** Immediately removes a deleted artifact from UI state while the backend reloads steps. */
+    fun removeArtifactLocally(uri: String, name: String) {
+        _artifacts.value = _artifacts.value.filterNot { snap ->
+            (uri.isNotBlank() && snap.absoluteUri == uri) ||
+                (name.isNotBlank() && snap.name == name)
+        }
+    }
+
     /**
      * Optimistically registers user prompt so UI feed never flickers or drops the user message
      * during the few milliseconds between sending and wire frame receipt.
@@ -690,7 +698,10 @@ class TrajectoryEngine {
                             rawContent = turn.rawText,
                             viaVoice = turn.viaVoice,
                             voiceLine = turn.voiceLine,
-                            checkpointKey = turn.clientMessageId
+                            checkpointKey = turn.clientMessageId,
+                            forkStepIndex = turn.stepIndex,
+                            editableStepIndex = turn.stepIndex,
+                            editableText = turn.text
                         )
                     )
                 }
@@ -707,7 +718,7 @@ class TrajectoryEngine {
                                 val streamTag = if (block.isStreaming) ":streaming" else ""
                                 val durTag = if (block.durationMs != null && block.durationMs > 0) ":${block.durationMs}" else ""
                                 if (thoughtText.isNotBlank()) {
-                                    contentParts.add("<!-- thought$streamTag$durTag -->\n$thoughtText\n<!-- /thought -->")
+                                    contentParts.add("<!-- thought$streamTag$durTag:step=${block.stepIndex} -->\n$thoughtText\n<!-- /thought -->")
                                     thoughts.add(thoughtText)
                                 }
                                 if (block.durationMs != null && block.durationMs > 0) {
@@ -785,6 +796,10 @@ class TrajectoryEngine {
                     }
                     seenMsgIds.add(aId)
 
+                    val lastTextBlock = turn.blocks.lastOrNull { it is TurnBlock.Text && it.markdown.isNotBlank() } as? TurnBlock.Text
+                    val maxStep = turn.blocks.maxOfOrNull { it.stepIndex }
+                    val firstStep = turn.blocks.firstOrNull()?.stepIndex
+
                     messages.add(
                         ChatMessage(
                             id = aId,
@@ -796,7 +811,11 @@ class TrajectoryEngine {
                             toolCalls = toolCalls,
                             isStreaming = turn.isStreaming,
                             tokenUsage = turn.tokenUsage?.let { u -> turn.modelId?.let { u.copy(model = modelDisplayName(it)) } ?: u },
-                            modelId = turn.modelId
+                            stepIndex = firstStep,
+                            modelId = turn.modelId,
+                            forkStepIndex = maxStep,
+                            editableStepIndex = lastTextBlock?.stepIndex,
+                            editableText = lastTextBlock?.markdown?.trim()
                         )
                     )
                 }

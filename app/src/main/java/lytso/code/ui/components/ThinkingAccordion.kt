@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,10 +32,12 @@ fun ThinkingAccordion(
     thoughtText: String,
     durationMs: Long?,
     isStreaming: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDelete: (() -> Unit)? = null
 ) {
     var isExpanded by remember { mutableStateOf(isStreaming) }
     var hasUserManuallyToggled by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     // Auto-expand while actively streaming thoughts if user hasn't manually toggled
     LaunchedEffect(isStreaming) {
@@ -133,7 +136,47 @@ fun ThinkingAccordion(
                         modifier = Modifier.weight(1f, fill = false)
                     )
                 }
+                if (onDelete != null) {
+                    Spacer(modifier = Modifier.weight(1f))
+                    IconButton(
+                        onClick = { confirmDelete = true },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.DeleteOutline,
+                            contentDescription = "Delete thinking step",
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
             }
+        }
+
+        if (confirmDelete && onDelete != null) {
+            AlertDialog(
+                onDismissRequest = { confirmDelete = false },
+                title = { Text("Remove thinking step?", fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        "Removes this reasoning block from chat history and from the model's context to break loops and save context window.",
+                        fontSize = 13.5.sp
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmDelete = false
+                            onDelete()
+                        }
+                    ) {
+                        Text("Remove", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+                }
+            )
         }
 
         // Clean borderless expandable content with subtle left accent line

@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material3.*
@@ -40,7 +41,7 @@ fun CustomSystemPromptDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableStateOf(if (!initialPrompt.isNullOrBlank()) 1 else 0) }
     var promptText by remember { mutableStateOf(initialPrompt ?: "") }
     var dynamicServerPrompt by remember { mutableStateOf<String?>(activeSystemPrompt) }
 
@@ -69,7 +70,7 @@ fun CustomSystemPromptDialog(
     val defaultSystemPrompt = remember(dynamicServerPrompt, conversationId, workspaceDir) {
         dynamicServerPrompt?.takeIf { it.isNotBlank() } ?: """
 <identity>
-You are Antigravity, a powerful agentic AI coding assistant designed by the Google Deepmind team working on Advanced Agentic Coding.
+You are LytsoCoder, a powerful agentic AI coding assistant working on Advanced Agentic Coding.
 You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.
 The USER will send you requests, which you must always prioritize addressing. User requests are enclosed within <USER_REQUEST> tags.
 </identity>
@@ -181,7 +182,7 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                         IconButton(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("Antigravity System Prompt", defaultSystemPrompt)
+                                val clip = ClipData.newPlainText("LytsoCoder System Prompt", defaultSystemPrompt)
                                 clipboard.setPrimaryClip(clip)
                                 Toast.makeText(context, "System prompt copied to clipboard", Toast.LENGTH_SHORT).show()
                             },
@@ -312,7 +313,23 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                         TextButton(onClick = onDismiss) {
                             Text("Close", fontSize = 13.sp)
                         }
-                        if (selectedTab == 1) {
+                        if (selectedTab == 0) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Button(
+                                onClick = {
+                                    if (promptText.isBlank()) {
+                                        promptText = defaultSystemPrompt.trim()
+                                    }
+                                    selectedTab = 1
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color.White)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Edit as override", fontSize = 12.5.sp, color = Color.White)
+                            }
+                        } else if (selectedTab == 1) {
                             Spacer(modifier = Modifier.width(6.dp))
                             Button(
                                 onClick = {

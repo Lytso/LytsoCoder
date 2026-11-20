@@ -546,7 +546,8 @@ class OpenCodeTranscript(var sessionId: String = "") {
                             role = MessageRole.USER,
                             content = text + m.attachmentNames.takeIf { it.isNotEmpty() }?.let { "\n\n📎 " + it.joinToString(", ") }.orEmpty(),
                             attachments = m.images + files,
-                            createdAt = m.created
+                            createdAt = m.created,
+                            entryUuid = m.id
                         )
                     )
                 }
@@ -651,7 +652,8 @@ class OpenCodeTranscript(var sessionId: String = "") {
                 model = model
             ),
             createdAt = started,
-            modelId = model
+            modelId = model,
+            entryUuid = last.id
         )
     }
 

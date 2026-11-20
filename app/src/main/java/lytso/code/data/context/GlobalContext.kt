@@ -45,11 +45,19 @@ object GlobalContext {
     private val _builtInEnabled = MutableStateFlow(true)
     val builtInEnabled: StateFlow<Boolean> = _builtInEnabled.asStateFlow()
 
+    private val _builtInCustomText = MutableStateFlow<String?>(null)
+    val builtInCustomText: StateFlow<String?> = _builtInCustomText.asStateFlow()
+
     private val _entries = MutableStateFlow<List<Entry>>(emptyList())
     val entries: StateFlow<List<Entry>> = _entries.asStateFlow()
 
     /** chat id → fingerprint of the first-message context it got (oldest first, trimmed). */
     private val sent = LinkedHashMap<String, String>()
+
+    /** chat id → custom per-chat system prompt override (oldest first, capped). */
+    private val chatPrompts = LinkedHashMap<String, String>()
+
+    private var runsOnPhoneTestOverride: Boolean? = null
 
     fun init(context: Context) {
         if (sp != null) return
@@ -57,6 +65,7 @@ object GlobalContext {
         filesDir = context.applicationContext.filesDir.absolutePath
         lytso.code.data.render.RenderBundle.init(context)
         _builtInEnabled.value = p.getBoolean("builtin_enabled", true)
+        _builtInCustomText.value = p.getString("builtin_custom_text", null)?.takeIf { it.isNotBlank() }
         _entries.value = runCatching {
             val arr = JSONArray(p.getString("entries", "[]"))
             (0 until arr.length()).map { i ->
@@ -75,7 +84,30 @@ object GlobalContext {
             val o = JSONObject(p.getString("sent", "{}") ?: "{}")
             synchronized(sent) { o.keys().forEach { k -> sent[k] = o.getString(k) } }
         }
+        runCatching {
+            val o = JSONObject(p.getString("chat_system_prompts", "{}") ?: "{}")
+            synchronized(chatPrompts) {
+                o.keys().forEach { k ->
+                    val v = o.optString(k)
+                    if (v.isNotBlank()) chatPrompts[k] = v
+                }
+            }
+        }
         sp = p
+    }
+
+    internal fun resetForTest(
+        filesDirOverride: String = "/data/user/0/lytso.cdev/files",
+        runsOnPhoneOverride: Boolean? = true
+    ) {
+        sp = null
+        filesDir = filesDirOverride
+        runsOnPhoneTestOverride = runsOnPhoneOverride
+        _builtInEnabled.value = true
+        _builtInCustomText.value = null
+        _entries.value = emptyList()
+        synchronized(sent) { sent.clear() }
+        synchronized(chatPrompts) { chatPrompts.clear() }
     }
 
     // ------------------------------------------------------------------ settings
@@ -83,6 +115,54 @@ object GlobalContext {
     fun setBuiltInEnabled(on: Boolean) {
         _builtInEnabled.value = on
         sp?.edit()?.putBoolean("builtin_enabled", on)?.apply()
+    }
+
+    fun isBuiltInCustomized(): Boolean = !_builtInCustomText.value.isNullOrBlank()
+
+    fun setBuiltInText(text: String?) {
+        val cleaned = text?.trim()?.takeIf { it.isNotBlank() && it != defaultBuiltInText() }
+        _builtInCustomText.value = cleaned
+        sp?.edit()?.apply {
+            if (cleaned == null) remove("builtin_custom_text") else putString("builtin_custom_text", cleaned)
+        }?.apply()
+    }
+
+    fun resetBuiltInText() = setBuiltInText(null)
+
+    fun chatSystemPrompt(chatId: String?): String? {
+        if (chatId.isNullOrBlank()) return null
+        return synchronized(chatPrompts) { chatPrompts[chatId] }
+    }
+
+    fun setChatSystemPrompt(chatId: String?, prompt: String?) {
+        if (chatId.isNullOrBlank()) return
+        val cleaned = prompt?.trim()?.takeIf { it.isNotBlank() }
+        synchronized(chatPrompts) {
+            chatPrompts.remove(chatId)
+            if (cleaned != null) {
+                chatPrompts[chatId] = cleaned
+                while (chatPrompts.size > MAX_REMEMBERED_CHATS) chatPrompts.remove(chatPrompts.keys.first())
+            }
+        }
+        persistChatPrompts()
+    }
+
+    fun copyChatSystemPrompt(fromChatId: String?, toChatId: String?) {
+        val existing = chatSystemPrompt(fromChatId) ?: return
+        setChatSystemPrompt(toChatId, existing)
+    }
+
+    fun deleteChatSystemPrompt(chatId: String?) {
+        if (chatId.isNullOrBlank()) return
+        val removed = synchronized(chatPrompts) { chatPrompts.remove(chatId) != null }
+        if (removed) persistChatPrompts()
+    }
+
+    private fun persistChatPrompts() {
+        val p = sp ?: return
+        val o = JSONObject()
+        synchronized(chatPrompts) { chatPrompts.forEach { (k, v) -> o.put(k, v) } }
+        p.edit().putString("chat_system_prompts", o.toString()).apply()
     }
 
     fun upsert(entry: Entry) {
@@ -110,10 +190,19 @@ object GlobalContext {
 
     /** The bridge on this phone: the agent runs in the app's Linux system (Termux packages), not on a server. */
     val runsOnPhone: Boolean
-        get() = !AuthPreferences.isRemoteEndpoint()
+        get() = runsOnPhoneTestOverride ?: !AuthPreferences.isRemoteEndpoint()
 
-    /** The built-in context for the current setup (Settings shows exactly this). [h]: the heading level of its sections. */
-    fun builtInText(h: String = "##"): String = buildString {
+    /** Effective built-in context (customized if edited in Settings, otherwise [defaultBuiltInText]). */
+    fun builtInText(h: String = "##"): String {
+        val custom = _builtInCustomText.value?.takeIf { it.isNotBlank() } ?: return defaultBuiltInText(h)
+        if (h == "##") return custom
+        return custom.lines().joinToString("\n") { line ->
+            if (line.startsWith("## ")) "$h " + line.removePrefix("## ") else line
+        }
+    }
+
+    /** Default built-in context for the current setup. [h]: the heading level of its sections. */
+    fun defaultBuiltInText(h: String = "##"): String = buildString {
         if (runsOnPhone) {
             append("$h Where you run\n")
             append("- Android, in the LytsoCoder app's Linux system (Termux packages): no root, no sudo; /tmp, /usr, /etc are not usable.\n")
@@ -149,11 +238,18 @@ object GlobalContext {
         return parts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
     }
 
-    /** What every message of a normal chat carries, or null. */
-    fun everyMessageBody(): String? {
+    /** What every message of a normal chat carries (including any per-chat custom system prompt), or null. */
+    fun everyMessageBody(chatId: String? = null): String? {
+        val blocks = mutableListOf<String>()
+        val chatPrompt = chatSystemPrompt(chatId)
+        if (!chatPrompt.isNullOrBlank()) {
+            blocks += "[Chat-specific system prompt]\n$chatPrompt"
+        }
         val own = active().filter { it.everyMessage }
-        if (own.isEmpty()) return null
-        return "[The user's standing instructions, sent with every message]\n" + entriesBlock(own)
+        if (own.isNotEmpty()) {
+            blocks += "[The user's standing instructions, sent with every message]\n" + entriesBlock(own)
+        }
+        return blocks.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
     }
 
     /** Changes whenever the first-message context changes. */
@@ -169,7 +265,7 @@ object GlobalContext {
         val fp = fingerprint()
         val known = chatId?.takeIf { it.isNotBlank() }?.let { id -> synchronized(sent) { sent[id] } }
         val sendFirst = first != null && (!hasEarlierMessages || known != fp)
-        val every = everyMessageBody()
+        val every = everyMessageBody(chatId)
         if (!sendFirst && every == null) return text to null
         val note = buildString {
             if (sendFirst) {
@@ -208,9 +304,10 @@ object GlobalContext {
     }
 
     private fun persistSent() {
+        val p = sp ?: return
         val o = JSONObject()
         synchronized(sent) { sent.forEach { (k, v) -> o.put(k, v) } }
-        sp?.edit()?.putString("sent", o.toString())?.apply()
+        p.edit().putString("sent", o.toString()).apply()
     }
 
     // ------------------------------------------------------------------ Jarvis

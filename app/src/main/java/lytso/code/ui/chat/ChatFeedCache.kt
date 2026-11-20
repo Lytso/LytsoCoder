@@ -49,7 +49,7 @@ object ChatFeedCache {
     val cache = ConcurrentHashMap<String, List<ChatFeedItem>>()
 
     fun getOrParse(msg: ChatMessage): List<ChatFeedItem> {
-        val cacheKey = "${msg.id}_${msg.content.hashCode()}_${msg.toolCalls.hashCode()}_${msg.thoughtText?.hashCode() ?: 0}_${msg.tokenUsage?.hashCode() ?: 0}"
+        val cacheKey = "${msg.conversationId}:${msg.id}_${msg.content.hashCode()}_${msg.toolCalls.hashCode()}_${msg.thoughtText?.hashCode() ?: 0}_${msg.tokenUsage?.hashCode() ?: 0}"
         val cached = cache[cacheKey]
         if (cached != null) return cached
 
@@ -246,6 +246,12 @@ object ChatFeedCache {
 
     fun clear() {
         cache.clear()
+    }
+
+    fun invalidate(conversationId: String) {
+        if (conversationId.isBlank()) return
+        val prefix = "$conversationId:"
+        cache.keys.removeAll { it.startsWith(prefix) }
     }
 
     private fun dayKey(millis: Long): String {

@@ -561,8 +561,12 @@ class OpenCodeChatBackend(
     }
 
     override fun selectConversation(id: String) {
-        val conv = _conversations.value.find { it.id == id }
-            ?: Conversation(id = id, title = "OpenCode Chat", sessionId = id, agent = AgentKind.OPENCODE)
+        val conv = (_conversations.value.find { it.id == id }
+            ?: Conversation(id = id, title = "OpenCode Chat", sessionId = id, agent = AgentKind.OPENCODE))
+            .let { c ->
+                val savedPrompt = lytso.code.data.context.GlobalContext.chatSystemPrompt(id)
+                if (savedPrompt != null) c.copy(customSystemPrompt = savedPrompt) else c
+            }
         store.currentConversation.value = conv
         if (conv.modelId.isNotBlank()) _selectedModelId.value = conv.modelId
         _conversationError.value = null
@@ -795,13 +799,27 @@ class OpenCodeChatBackend(
         }
     }
 
-    override fun forkConversation(id: String) {
+    override fun forkConversation(id: String) = forkConversationAt(id, messageId = null)
+
+    fun forkConversationAt(id: String, messageId: String?) {
         backendScope.launch {
-            client.post("/session/$id/fork", buildJsonObject { })
+            val body = buildJsonObject {
+                if (!messageId.isNullOrBlank()) put("messageID", messageId)
+            }
+            client.post("/session/$id/fork", body)
                 .onSuccess { res ->
                     val newId = res.obj().o("data").str("id") ?: res.obj().str("id")
                     refreshSessions()
-                    if (newId != null) selectConversation(newId)
+                    if (newId != null) {
+                        lytso.code.data.context.GlobalContext.copyChatSystemPrompt(id, newId)
+                        withContextMain {
+                            lytso.code.ui.components.AppToastHelper.showToast(
+                                "Branched conversation",
+                                lytso.code.ui.components.ChatToastType.SUCCESS
+                            )
+                            selectConversation(newId)
+                        }
+                    }
                 }
                 .onFailure { _toasts.tryEmit("Could not copy the chat: ${it.message}") }
         }

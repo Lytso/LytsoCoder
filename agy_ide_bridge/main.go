@@ -501,6 +501,12 @@ func main() {
 			h.UpdateConversationTitleHandler(w, r)
 		} else if strings.HasSuffix(path, "/warm") {
 			h.PrewarmConversationHandler(w, r)
+		} else if strings.HasSuffix(path, "/steps/edit") {
+			h.EditStepHandler(w, r)
+		} else if strings.HasSuffix(path, "/thinking/delete") {
+			h.DeleteThinkingHandler(w, r)
+		} else if strings.HasSuffix(path, "/artifacts/delete") {
+			h.DeleteArtifactHandler(w, r)
 		} else if strings.HasSuffix(path, "/export") || strings.HasSuffix(path, "/share") {
 			h.ExportConversationArchiveHandler(w, r)
 		} else {

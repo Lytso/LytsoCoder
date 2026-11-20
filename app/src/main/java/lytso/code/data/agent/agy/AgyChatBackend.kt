@@ -1082,8 +1082,12 @@ class AgyChatBackend(
         backendScope.launch {
             _conversationError.value = null
 
-            val conv = _conversations.value.find { it.id == id }
-                ?: Conversation(id = id, title = "Antigravity Chat", sessionId = id)
+            val conv = (_conversations.value.find { it.id == id }
+                ?: Conversation(id = id, title = "LytsoCoder Chat", sessionId = id))
+                .let { c ->
+                    val savedPrompt = lytso.code.data.context.GlobalContext.chatSystemPrompt(id)
+                    if (savedPrompt != null) c.copy(customSystemPrompt = savedPrompt) else c
+                }
             Log.d("CHAT_OPEN_DEBUG", "👉 [ChatViewModel.selectConversation] Launching stream for conv: title='${conv.title}', id=${conv.id}")
             _currentConversation.value = conv
             // this app's pending queued sends for the chat (the daemon's queue arrives with the first frame)
@@ -1479,16 +1483,25 @@ class AgyChatBackend(
         }
     }
 
-    override fun forkConversation(id: String) {
+    override fun forkConversation(id: String) = forkConversationAt(id, forkAtStepIndex = null)
+
+    fun forkConversationAt(id: String, forkAtStepIndex: Int?) {
         backendScope.launch {
             _isLoadingConversation.value = true
             _conversationError.value = null
             try {
                 val hubUrl = AuthPreferences.currentHubUrl
-                val res = agyHubClient.forkConversation(sourceCascadeId = id, forkAtStepIndex = null, hubUrl = hubUrl)
+                val res = agyHubClient.forkConversation(sourceCascadeId = id, forkAtStepIndex = forkAtStepIndex, hubUrl = hubUrl)
                 if (res.isSuccess) {
                     val newCascadeId = res.getOrThrow()
                     if (newCascadeId.isNotBlank()) {
+                        lytso.code.data.context.GlobalContext.copyChatSystemPrompt(id, newCascadeId)
+                        withContext(Dispatchers.Main) {
+                            lytso.code.ui.components.AppToastHelper.showToast(
+                                "Branched conversation",
+                                lytso.code.ui.components.ChatToastType.SUCCESS
+                            )
+                        }
                         selectConversation(newCascadeId)
                     }
                 } else {
@@ -1499,6 +1512,146 @@ class AgyChatBackend(
                 _conversationError.value = "Fork error: ${e.message}"
             } finally {
                 _isLoadingConversation.value = false
+            }
+        }
+    }
+
+    private suspend fun forceReloadAfterBrainMutation(convId: String) {
+        withContext(Dispatchers.Main) {
+            lytso.code.ui.chat.ChatFeedCache.invalidate(convId)
+            if (activeStreamConversationId == convId) {
+                persistentStreamJob?.cancel()
+                persistentStreamJob = null
+                activeStreamConversationId = null
+                trajectoryEngine.reset(convId, force = true)
+                selectConversation(convId)
+            }
+        }
+    }
+
+    /** Edits a user or assistant step directly in SQLite/brain without deleting subsequent messages. */
+    fun editMessageInPlace(
+        message: ChatMessage,
+        newText: String,
+        onDone: (Boolean, String?) -> Unit = { _, _ -> }
+    ) {
+        val conv = _currentConversation.value ?: return onDone(false, "No active conversation")
+        if (conv.isCloud) {
+            return onDone(false, "Cloud conversations cannot edit local brain state directly")
+        }
+        if (_isStreaming.value) {
+            return onDone(false, "Stop generation before editing")
+        }
+        val stepIdx = message.editableStepIndex ?: message.stepIndex
+            ?: return onDone(false, "No editable step index for this message")
+        val role = if (message.role == MessageRole.USER) "user" else "assistant"
+        backendScope.launch(Dispatchers.IO) {
+            val res = lytso.code.data.remote.BrainControlClient.editAgyStep(
+                convId = conv.id,
+                stepIndex = stepIdx,
+                role = role,
+                text = newText,
+                preserveHidden = message.role == MessageRole.USER
+            )
+            if (res.isSuccess) {
+                forceReloadAfterBrainMutation(conv.id)
+                withContext(Dispatchers.Main) {
+                    lytso.code.ui.components.AppToastHelper.showToast(
+                        "Message updated in context",
+                        lytso.code.ui.components.ChatToastType.SUCCESS
+                    )
+                    onDone(true, null)
+                }
+            } else {
+                val err = res.exceptionOrNull()?.message ?: "Edit failed"
+                withContext(Dispatchers.Main) {
+                    lytso.code.ui.components.AppToastHelper.showToast(
+                        "Edit failed: $err",
+                        lytso.code.ui.components.ChatToastType.ERROR
+                    )
+                    onDone(false, err)
+                }
+            }
+        }
+    }
+
+    /** Removes a reasoning/thinking block from SQLite/transcript so the AI stops re-reading loop thoughts. */
+    fun deleteThinkingStep(stepIndex: Int) {
+        val conv = _currentConversation.value ?: return
+        if (conv.isCloud) {
+            lytso.code.ui.components.AppToastHelper.showToast(
+                "Cloud conversations do not expose local brain SQLite storage",
+                lytso.code.ui.components.ChatToastType.INFO
+            )
+            return
+        }
+        if (_isStreaming.value) {
+            lytso.code.ui.components.AppToastHelper.showToast(
+                "Wait for generation to finish first",
+                lytso.code.ui.components.ChatToastType.INFO
+            )
+            return
+        }
+        backendScope.launch(Dispatchers.IO) {
+            val res = lytso.code.data.remote.BrainControlClient.deleteAgyThinking(conv.id, listOf(stepIndex))
+            if (res.isSuccess) {
+                forceReloadAfterBrainMutation(conv.id)
+                withContext(Dispatchers.Main) {
+                    lytso.code.ui.components.AppToastHelper.showToast(
+                        "Thinking step removed from context",
+                        lytso.code.ui.components.ChatToastType.SUCCESS
+                    )
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    lytso.code.ui.components.AppToastHelper.showToast(
+                        "Could not remove thinking step: ${res.exceptionOrNull()?.message}",
+                        lytso.code.ui.components.ChatToastType.ERROR
+                    )
+                }
+            }
+        }
+    }
+
+    /** Deletes an obsolete artifact from brain disk and redacts its payloads from conversation SQLite steps. */
+    fun deleteArtifact(artifact: lytso.code.domain.model.ArtifactSnapshot) {
+        val conv = _currentConversation.value ?: return
+        if (conv.isCloud) {
+            lytso.code.ui.components.AppToastHelper.showToast(
+                "Cannot delete artifacts from a cloud chat",
+                lytso.code.ui.components.ChatToastType.INFO
+            )
+            return
+        }
+        if (_isStreaming.value) {
+            lytso.code.ui.components.AppToastHelper.showToast(
+                "Wait for generation to finish first",
+                lytso.code.ui.components.ChatToastType.INFO
+            )
+            return
+        }
+        backendScope.launch(Dispatchers.IO) {
+            val res = lytso.code.data.remote.BrainControlClient.deleteAgyArtifact(
+                convId = conv.id,
+                uri = artifact.absoluteUri,
+                name = artifact.name
+            )
+            if (res.isSuccess) {
+                trajectoryEngine.removeArtifactLocally(artifact.absoluteUri, artifact.name)
+                forceReloadAfterBrainMutation(conv.id)
+                withContext(Dispatchers.Main) {
+                    lytso.code.ui.components.AppToastHelper.showToast(
+                        "Artifact deleted and removed from context",
+                        lytso.code.ui.components.ChatToastType.SUCCESS
+                    )
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    lytso.code.ui.components.AppToastHelper.showToast(
+                        "Could not delete artifact: ${res.exceptionOrNull()?.message}",
+                        lytso.code.ui.components.ChatToastType.ERROR
+                    )
+                }
             }
         }
     }
@@ -1711,6 +1864,7 @@ class AgyChatBackend(
         refreshQueuedMessages(conv.id)
         backendScope.launch(Dispatchers.IO) {
             val (modelEnum, thinkingBudget, policy) = promptSettings()
+            val customSysPrompt = lytso.code.data.context.GlobalContext.chatSystemPrompt(conv.id) ?: conv.customSystemPrompt
             val res = agyHubClient.sendUserPrompt(
                 cascadeId = conv.id,
                 text = entry.text,
@@ -1720,7 +1874,8 @@ class AgyChatBackend(
                 deliveryStrategy = exa.language_server_pb.MessageDeliveryStrategy.MESSAGE_DELIVERY_STRATEGY_NEXT_INVOCATION,
                 clientMessageId = clientMessageId,
                 rawMedia = entry.media,
-                cloud = conv.isCloud
+                cloud = conv.isCloud,
+                customSystemPrompt = customSysPrompt
             )
             if (res.isSuccess) {
                 agyHubClient.deleteAgentMessage(conv.id, id).onFailure { Log.w("ChatViewModel", "deleteAgentMessage: ${it.message}") }
@@ -2075,6 +2230,7 @@ class AgyChatBackend(
                     else lytso.code.data.checkpoint.ProjectCheckpoints.beforeTurn(AgentKind.AGY, conv.id, ws, clientMessageId, title)
                 }
 
+                val customSysPrompt = lytso.code.data.context.GlobalContext.chatSystemPrompt(conv.id) ?: conv.customSystemPrompt
                 var sendRes = agyHubClient.sendUserPrompt(
                     cascadeId = conv.id,
                     text = userPrompt,
@@ -2085,7 +2241,8 @@ class AgyChatBackend(
                     hubUrl = hubUrl,
                     deliveryStrategy = deliveryStrategy,
                     clientMessageId = clientMessageId,
-                    cloud = conv.isCloud
+                    cloud = conv.isCloud,
+                    customSystemPrompt = customSysPrompt
                 )
 
                 if (sendRes.isFailure) {
@@ -2114,7 +2271,8 @@ class AgyChatBackend(
                                 hubUrl = hubUrl,
                                 deliveryStrategy = deliveryStrategy,
                                 clientMessageId = clientMessageId,
-                                cloud = conv.isCloud
+                                cloud = conv.isCloud,
+                                customSystemPrompt = customSysPrompt
                             )
                         }
                     }

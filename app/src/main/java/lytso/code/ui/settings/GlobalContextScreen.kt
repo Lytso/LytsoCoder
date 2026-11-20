@@ -11,7 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -59,16 +59,18 @@ fun GlobalContextEntryRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 /**
- * Settings → Agents → Global context: the app's built-in context (read-only, can be turned off) and the user's own
- * entries, each sent in the first message of a chat or with every message, and to Jarvis only when allowed.
+ * Settings → Agents → Global context: the app's built-in context (editable, can be turned off or reset) and the
+ * user's own entries, each sent in the first message of a chat or with every message, and to Jarvis only when allowed.
  */
 @Composable
 fun GlobalContextScreen() {
     val builtInOn by GlobalContext.builtInEnabled.collectAsState()
+    val builtInCustom by GlobalContext.builtInCustomText.collectAsState()
     val entries by GlobalContext.entries.collectAsState()
     var showBuiltIn by remember { mutableStateOf(false) }
+    var editingBuiltIn by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<GlobalContext.Entry?>(null) }
-    val builtIn = remember { GlobalContext.builtInText() }
+    val builtIn = remember(builtInCustom) { GlobalContext.builtInText() }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
     Column(Modifier.fillMaxSize().bouncyVerticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -86,9 +88,13 @@ fun GlobalContextScreen() {
                     Column(Modifier.weight(1f)) {
                         Text("Built-in context", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.Lock, null, tint = muted, modifier = Modifier.size(12.dp))
+                            Icon(Icons.Outlined.Edit, null, tint = muted, modifier = Modifier.size(12.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("By LytsoCoder · read-only · first message", fontSize = 12.sp, color = muted)
+                            Text(
+                                if (builtInCustom != null) "Customized · first message" else "By LytsoCoder · editable · first message",
+                                fontSize = 12.sp,
+                                color = muted
+                            )
                         }
                     }
                     Switch(checked = builtInOn, onCheckedChange = { GlobalContext.setBuiltInEnabled(it) })
@@ -103,8 +109,22 @@ fun GlobalContextScreen() {
                     Spacer(Modifier.height(4.dp))
                     Text("The Android part is added only while the bridge runs on this phone.", fontSize = 11.5.sp, color = muted)
                 }
-                TextButton(onClick = { showBuiltIn = !showBuiltIn }, contentPadding = PaddingValues(horizontal = 0.dp)) {
-                    Text(if (showBuiltIn) "Hide the text" else "Show exactly what is sent")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { showBuiltIn = !showBuiltIn }, contentPadding = PaddingValues(horizontal = 0.dp)) {
+                        Text(if (showBuiltIn) "Hide the text" else "Show exactly what is sent")
+                    }
+                    TextButton(onClick = { editingBuiltIn = true }, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                        Text("Edit")
+                    }
+                    if (builtInCustom != null) {
+                        TextButton(onClick = { GlobalContext.resetBuiltInText() }, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                            Text("Reset", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                 }
                 if (showBuiltIn) {
                     SelectionContainer {
@@ -160,6 +180,69 @@ fun GlobalContextScreen() {
             onDismiss = { editing = null }
         )
     }
+
+    if (editingBuiltIn) {
+        BuiltInContextEditor(
+            initialText = builtIn,
+            isCustomized = builtInCustom != null,
+            onSave = {
+                GlobalContext.setBuiltInText(it)
+                editingBuiltIn = false
+            },
+            onReset = {
+                GlobalContext.resetBuiltInText()
+                editingBuiltIn = false
+            },
+            onDismiss = { editingBuiltIn = false }
+        )
+    }
+}
+
+@Composable
+private fun BuiltInContextEditor(
+    initialText: String,
+    isCustomized: Boolean,
+    onSave: (String?) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var text by remember(initialText) { mutableStateOf(initialText) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.fillMaxWidth(0.94f).widthIn(max = 580.dp),
+        title = { Text("Edit built-in system context", fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    "Sent automatically in front of every chat's first message (and re-sent whenever edited). Clear to restore the default.",
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    minLines = 10,
+                    maxLines = 18,
+                    textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 17.sp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(text) }) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                if (isCustomized) {
+                    TextButton(onClick = onReset) { Text("Reset default", color = MaterialTheme.colorScheme.error) }
+                }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        }
+    )
 }
 
 @Composable

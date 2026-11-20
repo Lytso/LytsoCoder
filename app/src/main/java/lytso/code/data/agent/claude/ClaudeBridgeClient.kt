@@ -134,9 +134,33 @@ class ClaudeBridgeClient(
     suspend fun rewind(sessionId: String, beforeUuid: String): Result<BridgeSimpleResponse> =
         post("/sessions/$sessionId/rewind", ClaudeJson.encodeToString(ClaudeRewindRequest(beforeUuid)))
 
-    /** Copies the chat under [newId] (written to disk right away). */
-    suspend fun fork(sessionId: String, newId: String, title: String): Result<BridgeSimpleResponse> =
-        post("/sessions/$sessionId/fork", ClaudeJson.encodeToString(ClaudeForkRequest(newId, title)))
+    /** Copies the chat under [newId] (written to disk right away), optionally stopping inclusively at [atUuid]. */
+    suspend fun fork(sessionId: String, newId: String, title: String, atUuid: String? = null): Result<BridgeSimpleResponse> =
+        post("/sessions/$sessionId/fork", ClaudeJson.encodeToString(ClaudeForkRequest(newId, title, atUuid)))
+
+    /** Edits a user or assistant message in place inside the transcript without deleting newer messages. */
+    suspend fun editMessage(
+        sessionId: String,
+        uuid: String,
+        text: String,
+        preserveHidden: Boolean = true
+    ): Result<BridgeSimpleResponse> =
+        post(
+            "/sessions/$sessionId/edit-message",
+            ClaudeJson.encodeToString(ClaudeEditMessageRequest(uuid, text, preserveHidden))
+        )
+
+    /** Deletes thinking/reasoning block(s) from an assistant entry inside the Claude transcript. */
+    suspend fun deleteThinking(
+        sessionId: String,
+        uuid: String? = null,
+        uuids: List<String>? = null,
+        contentIndex: Int? = null
+    ): Result<BridgeSimpleResponse> =
+        post(
+            "/sessions/$sessionId/delete-thinking",
+            ClaudeJson.encodeToString(ClaudeDeleteThinkingRequest(uuid, uuids, contentIndex))
+        )
 
     suspend fun delete(sessionId: String): Result<BridgeSimpleResponse> =
         call(Request.Builder().url(url("/sessions/$sessionId")).delete().build())

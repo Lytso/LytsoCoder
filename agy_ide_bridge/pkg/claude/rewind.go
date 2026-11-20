@@ -81,6 +81,12 @@ func (m *Manager) RewindSession(id, before string) error {
 // ForkSession copies a session's transcript under newID (same project folder) so the copy is a chat of its own
 // right away; resuming it gives Claude the same history.
 func (m *Manager) ForkSession(id, newID, title string) error {
+	return m.ForkSessionAt(id, newID, title, "")
+}
+
+// ForkSessionAt branches a session into newID up to atUUID (inclusive) while keeping the original chat intact.
+// When atUUID is empty, the entire conversation is copied.
+func (m *Manager) ForkSessionAt(id, newID, title, atUUID string) error {
 	src := m.FindTranscript(id)
 	if src == "" {
 		return os.ErrNotExist
@@ -88,6 +94,57 @@ func (m *Manager) ForkSession(id, newID, title string) error {
 	if m.FindTranscript(newID) != "" {
 		return errors.New("session already exists")
 	}
+
+	var keepUUIDs map[string]bool
+	if atUUID != "" {
+		raw, err := os.ReadFile(src)
+		if err != nil {
+			return err
+		}
+		type node struct {
+			parent     string
+			toolResult bool
+		}
+		byUUID := map[string]node{}
+		var order []string
+		forEachLine(raw, func(l transcriptLine) {
+			if l.UUID == "" {
+				return
+			}
+			parent := ""
+			if l.ParentUUID != nil {
+				parent = *l.ParentUUID
+			} else if l.LogicalUUID != nil {
+				parent = *l.LogicalUUID
+			}
+			if _, seen := byUUID[l.UUID]; !seen {
+				order = append(order, l.UUID)
+			}
+			byUUID[l.UUID] = node{
+				parent:     parent,
+				toolResult: l.Type == "user" && strings.Contains(string(l.Message), `"tool_result"`),
+			}
+		})
+		if _, ok := byUUID[atUUID]; !ok {
+			return errors.New("that message is not in the transcript")
+		}
+		keepUUIDs = map[string]bool{}
+		for cur := atUUID; cur != "" && !keepUUIDs[cur]; {
+			n, ok := byUUID[cur]
+			if !ok {
+				break
+			}
+			keepUUIDs[cur] = true
+			cur = n.parent
+		}
+		for _, uid := range order {
+			n := byUUID[uid]
+			if !keepUUIDs[uid] && n.toolResult && keepUUIDs[n.parent] {
+				keepUUIDs[uid] = true
+			}
+		}
+	}
+
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -108,6 +165,17 @@ func (m *Manager) ForkSession(id, newID, title string) error {
 		if strings.HasPrefix(trimmed, "{") {
 			var obj map[string]json.RawMessage
 			if json.Unmarshal([]byte(trimmed), &obj) == nil {
+				if keepUUIDs != nil {
+					var uid, ltype string
+					_ = json.Unmarshal(obj["uuid"], &uid)
+					_ = json.Unmarshal(obj["type"], &ltype)
+					if ltype == "custom-title" {
+						goto nextLine
+					}
+					if uid != "" && !keepUUIDs[uid] {
+						goto nextLine
+					}
+				}
 				if _, ok := obj["sessionId"]; ok {
 					obj["sessionId"] = sessionID
 				}
@@ -116,6 +184,7 @@ func (m *Manager) ForkSession(id, newID, title string) error {
 				}
 			}
 		}
+	nextLine:
 		if rerr != nil {
 			break
 		}
@@ -137,9 +206,11 @@ func (m *Manager) ForkSession(id, newID, title string) error {
 		os.Remove(tmp)
 		return err
 	}
-	// a rewind not taken yet belongs to the copy too
-	if at, ok := m.rewindPoint(id); ok {
-		_ = m.setRewind(newID, at)
+	// a rewind not taken yet belongs to the whole copy
+	if atUUID == "" {
+		if at, ok := m.rewindPoint(id); ok {
+			_ = m.setRewind(newID, at)
+		}
 	}
 	m.copySessionModel(id, newID)
 	return nil

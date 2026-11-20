@@ -25,6 +25,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"gemini-server/pkg/brainctl"
 	"gemini-server/pkg/config"
 	"gemini-server/pkg/hub"
 	"gemini-server/pkg/models"
@@ -354,6 +355,107 @@ func (h *Handler) DeleteConversationHandler(w http.ResponseWriter, r *http.Reque
 	fmt.Printf("[Conversations] Deleted brain directory on disk for %s\n", convID)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "deleted", "id": convID})
+}
+
+func extractConvIDSubroute(path string) string {
+	rest := strings.TrimPrefix(path, "/api/conversations/")
+	return strings.TrimSpace(strings.SplitN(rest, "/", 2)[0])
+}
+
+func (h *Handler) runBrainMutation(fn func() error) (bool, error) {
+	if h.HubManager != nil {
+		return h.HubManager.WithPausedHub(fn)
+	}
+	return false, fn()
+}
+
+func (h *Handler) EditStepHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	convID := extractConvIDSubroute(r.URL.Path)
+	var req struct {
+		StepIndex      *int   `json:"stepIndex"`
+		Role           string `json:"role"`
+		Text           string `json:"text"`
+		PreserveHidden *bool  `json:"preserveHidden"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.StepIndex == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "stepIndex and text required"})
+		return
+	}
+	preserve := true
+	if req.PreserveHidden != nil {
+		preserve = *req.PreserveHidden
+	}
+	restarted, err := h.runBrainMutation(func() error {
+		return brainctl.EditStep(h.Cfg.AppDataDir, h.Cfg.BrainDir, convID, *req.StepIndex, req.Role, req.Text, preserve)
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": err.Error(), "restarted": restarted})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"success": true, "restarted": restarted})
+}
+
+func (h *Handler) DeleteThinkingHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	convID := extractConvIDSubroute(r.URL.Path)
+	var req struct {
+		StepIndices []int `json:"stepIndices"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.StepIndices) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "stepIndices required"})
+		return
+	}
+	modified := 0
+	restarted, err := h.runBrainMutation(func() error {
+		var mErr error
+		modified, mErr = brainctl.DeleteThinking(h.Cfg.AppDataDir, h.Cfg.BrainDir, convID, req.StepIndices)
+		return mErr
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": err.Error(), "restarted": restarted})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"success": true, "modified": modified, "restarted": restarted})
+}
+
+func (h *Handler) DeleteArtifactHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	convID := extractConvIDSubroute(r.URL.Path)
+	var req struct {
+		URI  string `json:"uri"`
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (strings.TrimSpace(req.URI) == "" && strings.TrimSpace(req.Name) == "") {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "uri or name required"})
+		return
+	}
+	var deletedFiles []string
+	redactedSteps := 0
+	restarted, err := h.runBrainMutation(func() error {
+		var dErr error
+		deletedFiles, redactedSteps, dErr = brainctl.DeleteArtifact(h.Cfg.AppDataDir, h.Cfg.BrainDir, convID, req.URI, req.Name)
+		return dErr
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": err.Error(), "restarted": restarted})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":       true,
+		"deletedFiles":  deletedFiles,
+		"redactedSteps": redactedSteps,
+		"restarted":     restarted,
+	})
 }
 
 func (h *Handler) PrewarmConversationHandler(w http.ResponseWriter, r *http.Request) {

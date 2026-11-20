@@ -83,11 +83,20 @@ class ClaudeTranscript {
         /** The model that wrote this reply, as the API reported it (`assistant.message.model`). */
         var model: String? = null
         var resultUsage: TokenUsage? = null
+        var lastEntryUuid: String? = null
     }
 
     private sealed class Part {
-        class Thinking(val text: StringBuilder = StringBuilder(), var streaming: Boolean = false) : Part()
-        class Text(val text: StringBuilder = StringBuilder()) : Part()
+        class Thinking(
+            val text: StringBuilder = StringBuilder(),
+            var streaming: Boolean = false,
+            var entryUuid: String? = null,
+            var contentIndex: Int = -1
+        ) : Part()
+        class Text(
+            val text: StringBuilder = StringBuilder(),
+            var entryUuid: String? = null
+        ) : Part()
         class Tool(val toolUseId: String) : Part()
         class Error(val title: String, val message: String) : Part()
     }
@@ -343,6 +352,7 @@ class ClaudeTranscript {
                 activeTurn = null
             }
         }
+        e.uuid?.let { turn.lastEntryUuid = it }
         if (!synthetic) e.message.model?.let {
             sessionModel = it
             turn.model = it
@@ -355,7 +365,7 @@ class ClaudeTranscript {
                 parseTime(e.timestamp)?.let { recordCache(u, it) }
             }
         }
-        for (block in e.message.content) {
+        e.message.content.forEachIndexed { rawContentIdx, block ->
             val index = turn.blockCounts.getOrDefault(msgId, 0)
             turn.blockCounts[msgId] = index + 1
             val key = blockKey(msgId, index)
@@ -368,12 +378,15 @@ class ClaudeTranscript {
                         part.text.setLength(0)
                         part.text.append(text)
                     }
+                    part.entryUuid = e.uuid
+                    part.contentIndex = rawContentIdx
                     part.streaming = false
                 }
                 "text" -> {
                     val part = existing as? Part.Text ?: Part.Text().also { turn.partByKey[key] = it; turn.parts.add(it) }
                     part.text.setLength(0)
                     part.text.append(block.text.orEmpty())
+                    part.entryUuid = e.uuid
                 }
                 "tool_use" -> {
                     val id = block.id ?: continue
@@ -412,7 +425,10 @@ class ClaudeTranscript {
         if (toolResults.isNotEmpty()) {
             val structured = e.tool_use_result ?: e.toolUseResult
             for (r in toolResults) applyToolResult(r, if (toolResults.size == 1) structured else null)
-            e.uuid?.let { lastEventUuid = it }
+            e.uuid?.let { uid ->
+                lastEventUuid = uid
+                activeTurn?.lastEntryUuid = uid
+            }
             return
         }
         if (e.isMeta) return
@@ -654,7 +670,10 @@ class ClaudeTranscript {
                 content = turn.text,
                 attachments = turn.attachments,
                 stepIndex = turn.stepIndex,
-                createdAt = turn.createdAt
+                createdAt = turn.createdAt,
+                editableText = turn.text,
+                entryUuid = turn.uuid,
+                editableEntryUuid = turn.uuid
             )
             is AssistantTurn -> assistantMessage(turn)
             is SummaryTurn -> ChatMessage(
@@ -680,7 +699,8 @@ class ClaudeTranscript {
                     val t = part.text.toString().trim()
                     if (t.isNotBlank()) {
                         val tag = if (part.streaming && turn.isStreaming) ":streaming" else ""
-                        contentParts.add("<!-- thought$tag -->\n$t\n<!-- /thought -->")
+                        val refTag = if (!part.entryUuid.isNullOrBlank()) ":ref=${part.entryUuid}:${part.contentIndex}" else ""
+                        contentParts.add("<!-- thought$tag$refTag -->\n$t\n<!-- /thought -->")
                         thoughts.add(t)
                     }
                 }
@@ -705,6 +725,7 @@ class ClaudeTranscript {
             }
         }
         val usage = (turn.resultUsage ?: turn.lastMessageUsage?.toTokenUsage())?.copy(model = turn.model)
+        val lastTextPart = turn.parts.lastOrNull { it is Part.Text && it.text.isNotBlank() } as? Part.Text
         return ChatMessage(
             id = turn.id,
             conversationId = conversationId,
@@ -714,7 +735,10 @@ class ClaudeTranscript {
             toolCalls = toolCalls,
             isStreaming = turn.isStreaming,
             tokenUsage = if (turn.isStreaming) null else usage,
-            modelId = turn.model
+            modelId = turn.model,
+            editableText = lastTextPart?.text?.toString()?.trim(),
+            entryUuid = turn.lastEntryUuid,
+            editableEntryUuid = lastTextPart?.entryUuid ?: turn.lastEntryUuid
         )
     }
 

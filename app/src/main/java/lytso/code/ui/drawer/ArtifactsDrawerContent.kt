@@ -44,6 +44,7 @@ import java.io.File
 fun ArtifactsDrawerContent(
     artifacts: List<ArtifactSnapshot>,
     onClose: () -> Unit,
+    onDeleteArtifact: ((ArtifactSnapshot) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -193,7 +194,8 @@ fun ArtifactsDrawerContent(
                                 coroutineScope = coroutineScope,
                                 snackbarHostState = snackbarHostState
                             )
-                        }
+                        },
+                        onDelete = if (onDeleteArtifact != null) ({ onDeleteArtifact(artifact) }) else null
                     )
                 }
             }
@@ -215,8 +217,10 @@ private fun ArtifactCardItem(
     artifact: ArtifactSnapshot,
     onOpen: () -> Unit,
     onDownload: () -> Unit,
+    onDelete: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    var confirmDelete by remember { mutableStateOf(false) }
     val isImage = isImageArtifact(artifact)
     val isPlan = artifact.name.contains("plan", ignoreCase = true) || artifact.absoluteUri.contains("plan", ignoreCase = true)
     val isWalkthrough = artifact.name.contains("walkthrough", ignoreCase = true) || artifact.absoluteUri.contains("walkthrough", ignoreCase = true)
@@ -338,6 +342,50 @@ private fun ArtifactCardItem(
                         modifier = Modifier.size(17.dp)
                     )
                 }
+
+                if (onDelete != null) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    IconButton(
+                        onClick = { confirmDelete = true },
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.DeleteOutline,
+                            contentDescription = "Delete obsolete artifact",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                }
+            }
+
+            if (confirmDelete && onDelete != null) {
+                AlertDialog(
+                    onDismissRequest = { confirmDelete = false },
+                    title = { Text("Delete obsolete artifact?", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Text(
+                            "Deletes \"${subtitle}\" and redacts its contents from the AI's context so the model stops processing discarded data.",
+                            fontSize = 13.5.sp
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                confirmDelete = false
+                                onDelete()
+                            }
+                        ) {
+                            Text("Delete", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+                    }
+                )
             }
 
             // Summary box if present

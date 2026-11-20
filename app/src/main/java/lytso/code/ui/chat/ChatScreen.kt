@@ -283,6 +283,7 @@ fun ChatScreen(
     val conversationError by viewModel.conversationError.collectAsState()
     val activeInstances by viewModel.activeInstances.collectAsState()
     val isActivelyRunning by viewModel.isCurrentChatActivelyRunning.collectAsState()
+    val isStreamActive by viewModel.isStreaming.collectAsState()
     val isBackgroundActive by viewModel.isCurrentChatBackgroundActive.collectAsState()
     val queuedMessages by viewModel.queuedMessages.collectAsState()
     val quotaSummary by viewModel.quotaSummary.collectAsState()
@@ -369,6 +370,9 @@ fun ChatScreen(
     val isLocalError = serverStatus is lytso.code.data.local.LocalServerStatus.Error
     var showRawPayloadDialog by remember { mutableStateOf<String?>(null) }
     var showChatTelemetryDialog by remember { mutableStateOf(false) }
+    var showCustomSystemPromptDialog by remember { mutableStateOf(false) }
+    var editingInPlaceMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    var isSavingInPlaceEdit by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     // an error card's "Reconnect in Settings" (an OpenCode account the provider rejected)
     LaunchedEffect(Unit) {
@@ -1928,6 +1932,14 @@ fun ChatScreen(
                                 )
                             }
                         }
+                        val hasCustomSysPrompt = !(currentConv?.customSystemPrompt ?: lytso.code.data.context.GlobalContext.chatSystemPrompt(currentConv?.id)).isNullOrBlank()
+                        IconButton(onClick = { showCustomSystemPromptDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Psychology,
+                                contentDescription = "Edit Chat System Prompt",
+                                tint = if (hasCustomSysPrompt) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                            )
+                        }
                         if (isDevModeEnabled) {
                             IconButton(onClick = { showChatTelemetryDialog = true }) {
                                 Icon(
@@ -2259,9 +2271,11 @@ fun ChatScreen(
                                                 message = feedItem.message,
                                                 isLastUserMessage = true,
                                                 isDevModeEnabled = isDevModeEnabled,
-                                                canEdit = !isReadOnlyChat,
+                                                canEdit = !isReadOnlyChat && !isStreamActive && !isActivelyRunning,
                                                 onEdit = { targetMsg ->
-                                                    if (willDeleteOutput) {
+                                                    if (viewModel.canEditInPlace(targetMsg)) {
+                                                        editingInPlaceMessage = targetMsg
+                                                    } else if (willDeleteOutput) {
                                                         pendingMessageAction = PendingMessageAction(MessageActionType.EDIT, targetMsg)
                                                     } else {
                                                         viewModel.revertAndEditLastUserMessage(targetMsg) { restoredText ->
@@ -2275,7 +2289,10 @@ fun ChatScreen(
                                                 checkpoint = messageCheckpoints[feedItem.message.id],
                                                 onRestoreCheckpoint = { msg ->
                                                     messageCheckpoints[msg.id]?.let { restoreSheetFor = msg to it }
-                                                }
+                                                },
+                                                onFork = if (!isReadOnlyChat && !isStreamActive && !isActivelyRunning) {
+                                                    { targetMsg -> viewModel.forkFromMessage(targetMsg) }
+                                                } else null
                                             )
                                         }
                                         is ChatFeedItem.AssistantThinking -> {
@@ -2305,7 +2322,10 @@ fun ChatScreen(
                                                         onRejectTool = if (isTool) { { toolCall -> if (toolCall.toolType == ToolType.ASK_CHOICE) viewModel.cancelUserChoices(toolCall, feedItem.messageId) else viewModel.rejectTerminalTool(toolCall, feedItem.messageId) } } else null,
                                                         onTerminateTool = if (isTool) { { toolCall -> viewModel.terminateRunningTerminalTool(toolCall, feedItem.messageId) } } else null,
                                                         onSubmitChoices = if (isTool) { { toolCall, responses, summaryPayload -> viewModel.submitUserChoices(toolCall, feedItem.messageId, responses, summaryPayload) } } else null,
-                                                        onSkipChoices = if (isTool) { { toolCall, responses -> viewModel.skipUserChoices(toolCall, feedItem.messageId, responses) } } else null
+                                                        onSkipChoices = if (isTool) { { toolCall, responses -> viewModel.skipUserChoices(toolCall, feedItem.messageId, responses) } } else null,
+                                                        onDeleteThought = if (!isReadOnlyChat && !isStreamActive && !isActivelyRunning) {
+                                                            { thoughtBlock -> viewModel.deleteThinkingStep(thoughtBlock) }
+                                                        } else null
                                                     )
                                                 }
                                                 // Text is selectable per block: each list item has its own selection container, so a
@@ -2340,7 +2360,12 @@ fun ChatScreen(
                                                     showRawPayloadDialog = payloadJson
                                                 },
                                                 onShowArtifacts = { showArtifactsDrawer = true },
-                                                artifactsCount = artifacts.size
+                                                artifactsCount = artifacts.size,
+                                                canEditInPlace = !isReadOnlyChat && !isStreamActive && !isActivelyRunning && viewModel.canEditInPlace(feedItem.message),
+                                                onEdit = { targetMsg -> editingInPlaceMessage = targetMsg },
+                                                onFork = if (!isReadOnlyChat && !isStreamActive && !isActivelyRunning) {
+                                                    { targetMsg -> viewModel.forkFromMessage(targetMsg) }
+                                                } else null
                                             )
                                         }
                                         is ChatFeedItem.StreamingMessage -> {
@@ -3659,7 +3684,104 @@ fun ChatScreen(
         ChatTelemetryDialog(
             conversation = currentConv,
             messages = messages,
+            onOpenSystemPrompt = { showCustomSystemPromptDialog = true },
             onDismiss = { showChatTelemetryDialog = false }
+        )
+    }
+
+    if (showCustomSystemPromptDialog) {
+        lytso.code.ui.components.CustomSystemPromptDialog(
+            initialPrompt = currentConv?.customSystemPrompt ?: lytso.code.data.context.GlobalContext.chatSystemPrompt(currentConv?.id),
+            conversationId = currentConv?.id,
+            workspaceDir = currentConv?.workspaceUri,
+            onSavePrompt = { prompt -> viewModel.updateCustomSystemPrompt(prompt) },
+            onDismiss = { showCustomSystemPromptDialog = false }
+        )
+    }
+
+    // Non-destructive In-Place Message Editor Dialog (updates brain/transcript without deleting newer messages)
+    editingInPlaceMessage?.let { targetMsg ->
+        val isUserMsg = targetMsg.role == lytso.code.domain.model.MessageRole.USER
+        val msgIndex = messages.indexOfFirst { it.id == targetMsg.id }
+        val hasLaterMessages = msgIndex in 0 until messages.lastIndex
+        val initialDraft = remember(targetMsg.id, targetMsg.editableText, targetMsg.content) {
+            targetMsg.editableText ?: lytso.code.data.remote.PromptExpansion.collapse(targetMsg.content)
+        }
+        var draftText by remember(targetMsg.id) { mutableStateOf(initialDraft) }
+
+        AlertDialog(
+            onDismissRequest = { if (!isSavingInPlaceEdit) editingInPlaceMessage = null },
+            shape = RoundedCornerShape(16.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = {
+                Text(
+                    text = if (isUserMsg) "Edit message in context" else "Edit response in context",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.5.sp
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Updates this message directly in conversation memory/context without deleting newer messages.",
+                        fontSize = 12.5.sp,
+                        lineHeight = 17.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = draftText,
+                        onValueChange = { draftText = it },
+                        enabled = !isSavingInPlaceEdit,
+                        minLines = 4,
+                        maxLines = 12,
+                        textStyle = LocalTextStyle.current.copy(fontSize = 13.5.sp, lineHeight = 19.sp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !isSavingInPlaceEdit && draftText.isNotBlank(),
+                    onClick = {
+                        isSavingInPlaceEdit = true
+                        viewModel.editMessageInPlace(targetMsg, draftText.trim()) { _, _ ->
+                            isSavingInPlaceEdit = false
+                            editingInPlaceMessage = null
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(if (isSavingInPlaceEdit) "Saving..." else "Save in place", fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (isUserMsg && !isSavingInPlaceEdit) {
+                        TextButton(
+                            onClick = {
+                                editingInPlaceMessage = null
+                                if (hasLaterMessages) {
+                                    pendingMessageAction = PendingMessageAction(MessageActionType.EDIT, targetMsg)
+                                } else {
+                                    viewModel.revertAndEditLastUserMessage(targetMsg) { restoredText ->
+                                        inputState.setTextAndPlaceCursorAtEnd(restoredText)
+                                    }
+                                }
+                            }
+                        ) {
+                            Text("Rewind & resend", fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    TextButton(
+                        enabled = !isSavingInPlaceEdit,
+                        onClick = { editingInPlaceMessage = null }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
         )
     }
 
@@ -3867,7 +3989,10 @@ fun ChatScreen(
                 ) {
                     ArtifactsDrawerContent(
                         artifacts = artifacts,
-                        onClose = { showArtifactsDrawer = false }
+                        onClose = { showArtifactsDrawer = false },
+                        onDeleteArtifact = if (!isReadOnlyChat && !isStreamActive && !isActivelyRunning && currentConv?.agent == lytso.code.domain.model.AgentKind.AGY) {
+                            { artifact -> viewModel.deleteArtifact(artifact) }
+                        } else null
                     )
                 }
             }

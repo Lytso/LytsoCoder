@@ -427,6 +427,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 agyBackend.selectConversation(id)
             }
         }
+        lytso.code.data.context.GlobalContext.chatSystemPrompt(id)?.let { savedPrompt ->
+            val cur = store.currentConversation.value
+            if (cur?.id == id && cur.customSystemPrompt != savedPrompt) {
+                store.currentConversation.value = cur.copy(customSystemPrompt = savedPrompt)
+            }
+        }
     }
     fun startPersistentStream(conversationId: String) = agyBackend.startPersistentStream(conversationId)
     fun deleteConversation(id: String) {
@@ -436,6 +442,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             AgentKind.CODEX -> codexBackend.deleteConversation(id)
             AgentKind.AGY -> agyBackend.deleteConversation(id)
         }
+        lytso.code.data.context.GlobalContext.deleteChatSystemPrompt(id)
+        lytso.code.data.context.GlobalContext.forget(id)
         // files the app copied for this chat go with it (never the user's own files picked in Files)
         val copies = lytso.code.data.files.AttachedFiles.takeCopiesOf(getApplication(), id)
         if (copies.isNotEmpty()) viewModelScope.launch(Dispatchers.IO) { lytso.code.data.files.FileExplorerApi.delete(copies) }
@@ -622,6 +630,114 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (isCodexActive) codexBackend.editMessage(targetMsg.id, restored)
         else if (isOpenCodeActive) openCodeBackend.editMessage(targetMsg.id, restoreCode, restored)
         else claudeBackend.editMessage(targetMsg.id, restoreCode, restored)
+    }
+
+    /** True if [message] can be edited non-destructively inside the persistent agent store without rewinding newer turns. */
+    fun canEditInPlace(message: ChatMessage): Boolean {
+        val conv = store.currentConversation.value ?: return false
+        if (conv.readOnly || message.isStreaming || isStreaming.value) return false
+        return when {
+            isClaudeActive -> !message.editableEntryUuid.isNullOrBlank() ||
+                !message.entryUuid.isNullOrBlank() ||
+                (message.role == MessageRole.USER && message.id.startsWith("user_"))
+            isOpenCodeActive || isCodexActive -> false
+            else -> !conv.isCloud && (message.editableStepIndex ?: message.stepIndex) != null
+        }
+    }
+
+    /** Non-destructive in-place edit: updates the message inside AGY SQLite or Claude JSONL without dropping newer turns. */
+    fun editMessageInPlace(
+        message: ChatMessage,
+        newText: String,
+        onDone: (Boolean, String?) -> Unit = { _, _ -> }
+    ) {
+        when {
+            isClaudeActive -> claudeBackend.editMessageInPlace(message, newText, onDone)
+            isOpenCodeActive -> {
+                openCodeNotSupported("Non-destructive message editing")
+                onDone(false, "Not supported for OpenCode")
+            }
+            isCodexActive -> {
+                codexNotSupported("Non-destructive message editing")
+                onDone(false, "Not supported for Codex")
+            }
+            else -> agyBackend.editMessageInPlace(message, newText, onDone)
+        }
+    }
+
+    /** Creates a branched copy of the conversation up through [message] while keeping the original conversation intact. */
+    fun forkFromMessage(message: ChatMessage) {
+        flushMemoryWait()
+        val convId = message.conversationId.ifBlank { currentConversation.value?.id.orEmpty() }
+        if (convId.isBlank()) return
+        when (agentOf(convId)) {
+            AgentKind.CODEX -> {
+                agyBackend.detach()
+                claudeBackend.detach()
+                openCodeBackend.detach()
+                codexBackend.forkConversationAt(convId, message)
+            }
+            AgentKind.OPENCODE -> {
+                agyBackend.detach()
+                claudeBackend.detach()
+                openCodeBackend.forkConversationAt(convId, message.entryUuid ?: message.id)
+            }
+            AgentKind.CLAUDE -> {
+                agyBackend.detach()
+                openCodeBackend.detach()
+                codexBackend.detach()
+                claudeBackend.forkConversationAt(convId, message.entryUuid ?: message.id.removePrefix("user_"))
+            }
+            AgentKind.AGY -> {
+                claudeBackend.detach()
+                openCodeBackend.detach()
+                codexBackend.detach()
+                agyBackend.forkConversationAt(convId, message.forkStepIndex ?: message.stepIndex)
+            }
+        }
+    }
+
+    /** Deletes a thinking/reasoning step directly from history and the persistent brain/transcript. */
+    fun deleteThinkingStep(thought: lytso.code.ui.components.MarkdownBlock.AgentThought) {
+        if (isStreaming.value) {
+            lytso.code.ui.components.AppToastHelper.showToast(
+                "Wait for generation to finish first",
+                lytso.code.ui.components.ChatToastType.INFO
+            )
+            return
+        }
+        when {
+            isClaudeActive -> {
+                val ref = thought.refId
+                if (ref.isNullOrBlank()) claudeNotSupported("Deleting this thinking step")
+                else claudeBackend.deleteThinkingStep(ref)
+            }
+            isOpenCodeActive -> openCodeNotSupported("Deleting thinking steps")
+            isCodexActive -> codexNotSupported("Deleting thinking steps")
+            else -> {
+                val stepIdx = thought.stepIndex
+                if (stepIdx == null) {
+                    lytso.code.ui.components.AppToastHelper.showToast(
+                        "Cannot identify step index for this thought block",
+                        lytso.code.ui.components.ChatToastType.INFO
+                    )
+                } else {
+                    agyBackend.deleteThinkingStep(stepIdx)
+                }
+            }
+        }
+    }
+
+    /** Deletes an obsolete artifact file and redacts its contents from the AI's context. */
+    fun deleteArtifact(artifact: lytso.code.domain.model.ArtifactSnapshot) {
+        if (isClaudeActive || isOpenCodeActive || isCodexActive) {
+            lytso.code.ui.components.AppToastHelper.showToast(
+                "Artifact context redaction is only supported for AGY chats",
+                lytso.code.ui.components.ChatToastType.INFO
+            )
+            return
+        }
+        agyBackend.deleteArtifact(artifact)
     }
 
     /** Sidebar export / share of a Claude chat that is not open. */
@@ -1187,9 +1303,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateCustomSystemPrompt(prompt: String?) {
         val conv = _currentConversation.value ?: return
-        val updated = conv.copy(customSystemPrompt = if (prompt.isNullOrBlank()) null else prompt.trim())
+        val cleaned = if (prompt.isNullOrBlank()) null else prompt.trim()
+        lytso.code.data.context.GlobalContext.setChatSystemPrompt(conv.id, cleaned)
+        val updated = conv.copy(customSystemPrompt = cleaned)
         _currentConversation.value = updated
         _conversations.value = _conversations.value.map { if (it.id == updated.id) updated else it }
+        lytso.code.ui.components.AppToastHelper.showToast(
+            if (cleaned == null) "Custom system prompt reset to default" else "Chat system prompt updated",
+            lytso.code.ui.components.ChatToastType.SUCCESS
+        )
     }
 
     val chatFontScale = authPrefs.chatFontScale

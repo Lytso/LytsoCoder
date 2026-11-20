@@ -115,7 +115,13 @@ sealed class MarkdownBlock {
     @androidx.compose.runtime.Immutable
     data class Alert(val type: AlertType, val title: String? = null, val text: String) : MarkdownBlock()
     @androidx.compose.runtime.Immutable
-    data class AgentThought(val thought: String, val durationMs: Long? = null, val isStreaming: Boolean = false) : MarkdownBlock()
+    data class AgentThought(
+        val thought: String,
+        val durationMs: Long? = null,
+        val isStreaming: Boolean = false,
+        val stepIndex: Int? = null,
+        val refId: String? = null
+    ) : MarkdownBlock()
     @androidx.compose.runtime.Immutable
     data class AgentTool(val toolCall: lytso.code.domain.model.ToolCall) : MarkdownBlock()
     @androidx.compose.runtime.Immutable
@@ -181,14 +187,17 @@ fun MarkdownBlockView(
     onRejectTool: ((lytso.code.domain.model.ToolCall) -> Unit)? = null,
     onTerminateTool: ((lytso.code.domain.model.ToolCall) -> Unit)? = null,
     onSubmitChoices: ((lytso.code.domain.model.ToolCall, List<lytso.code.data.remote.dto.AskQuestionResponseItemDto>, String) -> Unit)? = null,
-    onSkipChoices: ((lytso.code.domain.model.ToolCall, List<lytso.code.data.remote.dto.AskQuestionResponseItemDto>) -> Unit)? = null
+    onSkipChoices: ((lytso.code.domain.model.ToolCall, List<lytso.code.data.remote.dto.AskQuestionResponseItemDto>) -> Unit)? = null,
+    onDeleteThought: ((MarkdownBlock.AgentThought) -> Unit)? = null
 ) {
     when (block) {
         is MarkdownBlock.AgentThought -> {
+            val deletable = !block.isStreaming && onDeleteThought != null && (block.stepIndex != null || !block.refId.isNullOrBlank())
             ThinkingAccordion(
                 thoughtText = block.thought,
                 durationMs = block.durationMs,
                 isStreaming = block.isStreaming,
+                onDelete = if (deletable) ({ onDeleteThought?.invoke(block) }) else null,
                 modifier = modifier.padding(vertical = 4.dp)
             )
         }
@@ -2816,7 +2825,35 @@ private fun buildRichAnnotatedString(
  * Full Markdown block parser supporting:
  * Math ($$, \[\], ```math), Fenced Code, <details><summary>, GFM Tables, Headers (1-6), Images, Task Checklists, Blockquotes, Lists, Dividers, Paragraphs.
  */
-private val THOUGHT_START_REGEX = Regex("<(?:!--\\s*)?thought(?:[:\\s]+(streaming))?(?:[:\\s]+(?:duration=)?[\"']?([0-9]+)[\"']?)?(?:\\s*--)?>", RegexOption.IGNORE_CASE)
+internal data class ThoughtHeaderMeta(
+    val isStreaming: Boolean = false,
+    val durationMs: Long? = null,
+    val stepIndex: Int? = null,
+    val refId: String? = null
+)
+
+private val THOUGHT_STEP_REGEX = Regex(""":step=(\d+)""")
+private val THOUGHT_REF_REGEX = Regex(""":ref=([A-Za-z0-9_.:-]+)""")
+private val THOUGHT_DURATION_REGEX = Regex("""(?:duration=|:)([0-9]+)""", RegexOption.IGNORE_CASE)
+
+internal fun parseThoughtHeader(header: String): ThoughtHeaderMeta {
+    val stepIndex = THOUGHT_STEP_REGEX.find(header)?.groupValues?.getOrNull(1)?.toIntOrNull()
+    val refId = THOUGHT_REF_REGEX.find(header)?.groupValues?.getOrNull(1)
+    val sanitizedForDuration = header
+        .replace(THOUGHT_STEP_REGEX, "")
+        .replace(THOUGHT_REF_REGEX, "")
+    val isStreaming = sanitizedForDuration.contains(":streaming", ignoreCase = true) ||
+        sanitizedForDuration.contains(" streaming", ignoreCase = true)
+    val durationMs = THOUGHT_DURATION_REGEX.find(sanitizedForDuration)?.groupValues?.getOrNull(1)?.toLongOrNull()
+    return ThoughtHeaderMeta(
+        isStreaming = isStreaming,
+        durationMs = durationMs,
+        stepIndex = stepIndex,
+        refId = refId
+    )
+}
+
+private val THOUGHT_START_REGEX = Regex("<(?:!--\\s*)?thought(?:[:\\s][^>]*?)?(?:\\s*--)?>", RegexOption.IGNORE_CASE)
 private val THOUGHT_END_REGEX = Regex("<(?:!--\\s*)?/thought(?:\\s*--)?>", RegexOption.IGNORE_CASE)
 private val ERROR_START_REGEX = Regex("<(?:!--\\s*)?error(?:[:\\s]+([a-zA-Z0-9_-]+))?(?:\\s*--)?>", RegexOption.IGNORE_CASE)
 private val ERROR_END_REGEX = Regex("<(?:!--\\s*)?/error(?:\\s*--)?>", RegexOption.IGNORE_CASE)
@@ -2931,15 +2968,21 @@ fun parseMarkdownBlocks(
             // -1. Sequential Agent Thought Block <!-- thought -->...<!-- /thought --> or <thought>
             val thoughtStartMatch = THOUGHT_START_REGEX.find(line)
             if (thoughtStartMatch != null) {
-                val isExplicitStreaming = line.contains(":streaming", ignoreCase = true) || line.contains(" streaming", ignoreCase = true)
-                val durationMs = Regex("""(?:duration=|:)([0-9]+)""", RegexOption.IGNORE_CASE).find(line)?.groupValues?.getOrNull(1)?.toLongOrNull()
-                    ?: thoughtStartMatch.groupValues.getOrNull(2)?.toLongOrNull()
+                val meta = parseThoughtHeader(thoughtStartMatch.value)
                 val thoughtLines = mutableListOf<String>()
 
                 if (line.contains("</thought>", ignoreCase = true) || line.contains("<!-- /thought -->", ignoreCase = true)) {
                     val raw = line.replace(THOUGHT_START_REGEX, "").replace(THOUGHT_END_REGEX, "").trim()
                     if (raw.isNotBlank()) {
-                        result.add(MarkdownBlock.AgentThought(raw, durationMs, isStreaming = isExplicitStreaming))
+                        result.add(
+                            MarkdownBlock.AgentThought(
+                                thought = raw,
+                                durationMs = meta.durationMs,
+                                isStreaming = meta.isStreaming,
+                                stepIndex = meta.stepIndex,
+                                refId = meta.refId
+                            )
+                        )
                     }
                     i++
                     continue
@@ -2964,11 +3007,27 @@ fun parseMarkdownBlocks(
                 }
 
                 val finalThought = thoughtLines.joinToString("\n").trim()
-                val isStreamingThought = isExplicitStreaming || !closed
+                val isStreamingThought = meta.isStreaming || !closed
                 if (finalThought.isNotBlank()) {
-                    result.add(MarkdownBlock.AgentThought(finalThought, durationMs, isStreaming = isStreamingThought))
-                } else if (!closed || isExplicitStreaming) {
-                    result.add(MarkdownBlock.AgentThought("Thinking...", durationMs, isStreaming = true))
+                    result.add(
+                        MarkdownBlock.AgentThought(
+                            thought = finalThought,
+                            durationMs = meta.durationMs,
+                            isStreaming = isStreamingThought,
+                            stepIndex = meta.stepIndex,
+                            refId = meta.refId
+                        )
+                    )
+                } else if (!closed || meta.isStreaming) {
+                    result.add(
+                        MarkdownBlock.AgentThought(
+                            thought = "Thinking...",
+                            durationMs = meta.durationMs,
+                            isStreaming = true,
+                            stepIndex = meta.stepIndex,
+                            refId = meta.refId
+                        )
+                    )
                 }
                 continue
             }

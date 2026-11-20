@@ -595,8 +595,12 @@ class CodexChatBackend(
     }
 
     override fun selectConversation(id: String) {
-        val conv = _conversations.value.find { it.id == id }
-            ?: Conversation(id = id, title = "Codex Chat", sessionId = id, agent = AgentKind.CODEX)
+        val conv = (_conversations.value.find { it.id == id }
+            ?: Conversation(id = id, title = "Codex Chat", sessionId = id, agent = AgentKind.CODEX))
+            .let { c ->
+                val savedPrompt = lytso.code.data.context.GlobalContext.chatSystemPrompt(id)
+                if (savedPrompt != null) c.copy(customSystemPrompt = savedPrompt) else c
+            }
         store.currentConversation.value = conv
         if (conv.modelId.isNotBlank()) { _selectedModelId.value = conv.modelId; syncEfforts() }
         _planMode.value = false
@@ -875,12 +879,30 @@ class CodexChatBackend(
         }
     }
 
-    override fun forkConversation(id: String) {
-        backendScope.launch {
+    override fun forkConversation(id: String) = forkConversationAt(id, targetMessage = null)
+
+    fun forkConversationAt(id: String, targetMessage: ChatMessage?) {
+        backendScope.launch(worker) {
             if (id !in createdSnapshot()) return@launch
+            val nextTurnId = targetMessage?.let { msg ->
+                val turnId = msg.checkpointKey ?: transcript.turnOfItem(msg.id)?.id
+                val ids = transcript.turnIds()
+                val idx = if (turnId != null) ids.indexOf(turnId) else -1
+                if (idx >= 0 && idx + 1 < ids.size) ids[idx + 1] else null
+            }
             client.rpc("thread/fork", buildJsonObject { put("threadId", id); put("excludeTurns", true) })
                 .onSuccess { res ->
                     val newId = res.obj().o("thread").str("id")
+                    if (newId != null) {
+                        if (nextTurnId != null) {
+                            client.rpc(
+                                "thread/revert",
+                                buildJsonObject { put("threadId", newId); put("beforeTurnId", nextTurnId) }
+                            )
+                        }
+                        lytso.code.data.context.GlobalContext.copyChatSystemPrompt(id, newId)
+                        _toasts.tryEmit("Branched conversation")
+                    }
                     refreshThreads()
                     if (newId != null) selectConversation(newId)
                 }

@@ -70,6 +70,7 @@ type HubManager struct {
 	crashLines   []string
 	crashCapture int
 	mu           sync.Mutex
+	opMu         sync.Mutex
 	// agyBinShadow mirrors AgyBinPath so the status endpoints never wait for mu
 	agyBinShadow atomic.Value
 }
@@ -582,17 +583,16 @@ func (m *HubManager) Start() error {
 		err := cmd.Wait()
 		streamWg.Wait() // Ensure all remaining output is drained and processed
 		m.mu.Lock()
-		m.isRunning = false
-		m.lastExitAt = time.Now()
-		if err != nil {
-			m.lastExitErr = err.Error()
-		} else {
-			m.lastExitErr = "exited normally"
-		}
-		if err != nil {
-			m.setStatusLocked(HubStatusError, err.Error())
-		} else {
-			m.setStatusLocked(HubStatusStopped, "")
+		if m.cmd == cmd {
+			m.isRunning = false
+			m.lastExitAt = time.Now()
+			if err != nil {
+				m.lastExitErr = err.Error()
+				m.setStatusLocked(HubStatusError, err.Error())
+			} else {
+				m.lastExitErr = "exited normally"
+				m.setStatusLocked(HubStatusStopped, "")
+			}
 		}
 		m.mu.Unlock()
 		processExited <- err
@@ -721,6 +721,72 @@ func (m *HubManager) Stop() {
 	}
 
 	m.setStatus(HubStatusStopped, "")
+}
+
+// WithPausedHub temporarily stops the bridge-managed `agy --hub` process (if running), runs fn so offline files or
+// conversation SQLite databases can be mutated cleanly without stale hub caches or locks, and restarts it afterwards.
+// Unlike Stop(), it keeps monitorStop alive and leaves the binary security header intact across the restart.
+func (m *HubManager) WithPausedHub(fn func() error) (bool, error) {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+
+	m.mu.Lock()
+	cmd := m.cmd
+	cancel := m.cancel
+	doneChan := m.processDone
+	shouldStop := cmd != nil && cmd.Process != nil && !m.isExternal
+	if shouldStop {
+		m.isRunning = false
+		m.csrfToken = ""
+		m.cmd = nil
+		m.cancel = nil
+	}
+	m.mu.Unlock()
+
+	if shouldStop {
+		if cancel != nil {
+			cancel()
+		}
+		pid := cmd.Process.Pid
+		if pgid, err := syscall.Getpgid(pid); err == nil {
+			_ = syscall.Kill(-pgid, syscall.SIGTERM)
+		} else {
+			_ = cmd.Process.Signal(syscall.SIGTERM)
+		}
+
+		stopped := false
+		if doneChan != nil {
+			select {
+			case <-doneChan:
+				stopped = true
+			case <-time.After(2500 * time.Millisecond):
+			}
+		}
+		if !stopped {
+			if pgid, err := syscall.Getpgid(pid); err == nil {
+				_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			}
+			_ = cmd.Process.Kill()
+			if doneChan != nil {
+				select {
+				case <-doneChan:
+				case <-time.After(1 * time.Second):
+				}
+			}
+		}
+		m.setStatus(HubStatusStopped, "")
+	}
+
+	fnErr := fn()
+
+	if shouldStop && !m.Disabled {
+		startErr := m.Start()
+		if fnErr != nil {
+			return true, fnErr
+		}
+		return true, startErr
+	}
+	return false, fnErr
 }
 
 func (m *HubManager) handleHubLine(line string) {

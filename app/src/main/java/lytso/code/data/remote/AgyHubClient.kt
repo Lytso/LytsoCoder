@@ -213,9 +213,10 @@ class AgyHubClient {
         deliveryStrategy: exa.language_server_pb.MessageDeliveryStrategy = exa.language_server_pb.MessageDeliveryStrategy.MESSAGE_DELIVERY_STRATEGY_WHEN_IDLE,
         clientMessageId: String? = null,
         rawMedia: List<exa.language_server_pb.Media> = emptyList(),
-        cloud: Boolean = false
+        cloud: Boolean = false,
+        customSystemPrompt: String? = null
     ): Result<Unit> =
-        chatService.sendUserPrompt(cascadeId, text, modelEnum, thinkingBudget, autoExecutionPolicy, media, hubUrl, deliveryStrategy, clientMessageId, rawMedia, cloud)
+        chatService.sendUserPrompt(cascadeId, text, modelEnum, thinkingBudget, autoExecutionPolicy, media, hubUrl, deliveryStrategy, clientMessageId, rawMedia, cloud, customSystemPrompt)
 
     suspend fun deleteAgentMessage(cascadeId: String, messageId: String): Result<Unit> =
         chatService.deleteAgentMessage(cascadeId, messageId)

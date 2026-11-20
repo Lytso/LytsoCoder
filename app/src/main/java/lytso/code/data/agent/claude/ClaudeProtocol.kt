@@ -438,9 +438,23 @@ data class ClaudeArchiveRequest(val archived: Boolean)
 @Serializable
 data class ClaudeRewindRequest(val before: String)
 
-/** Copies a chat under [new_id]. */
+/** Copies a chat under [new_id], optionally branching inclusively up to [at_uuid]. */
 @Serializable
-data class ClaudeForkRequest(val new_id: String, val title: String)
+data class ClaudeForkRequest(val new_id: String, val title: String, val at_uuid: String? = null)
+
+@Serializable
+data class ClaudeEditMessageRequest(
+    val uuid: String,
+    val text: String,
+    val preserve_hidden: Boolean = true
+)
+
+@Serializable
+data class ClaudeDeleteThinkingRequest(
+    val uuid: String? = null,
+    val uuids: List<String>? = null,
+    val content_index: Int? = null
+)
 
 /** `get_settings().applied`: what the running process really uses. */
 @Serializable

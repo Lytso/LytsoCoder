@@ -281,8 +281,10 @@ class ClaudeChatBackend(
     }
 
     override fun selectConversation(id: String) {
-        val conv = _conversations.value.find { it.id == id }
+        val base = _conversations.value.find { it.id == id }
             ?: Conversation(id = id, title = "Claude Chat", sessionId = id, agent = AgentKind.CLAUDE, readOnly = ClaudeTranscript.isSubagentId(id))
+        val savedPrompt = lytso.code.data.context.GlobalContext.chatSystemPrompt(id)
+        val conv = if (savedPrompt != null) base.copy(customSystemPrompt = savedPrompt) else base
         showConversation(conv, loading = true)
         backendScope.launch(worker) {
             detachLocked()
@@ -420,20 +422,104 @@ class ClaudeChatBackend(
     }
 
     /** Copies the chat on the bridge (it is a chat of its own right away) and opens the copy. */
-    override fun forkConversation(id: String) {
+    override fun forkConversation(id: String) = forkConversationAt(id, atUuid = null)
+
+    /** Branches a Claude conversation inclusively up to [atUuid] while keeping the original chat intact. */
+    fun forkConversationAt(id: String, atUuid: String?) {
         val source = _conversations.value.find { it.id == id } ?: return
         val newId = UUID.randomUUID().toString()
-        val title = "${source.title} (fork)"
+        val title = if (atUuid.isNullOrBlank()) "${source.title} (fork)" else "${source.title} (branch)"
+        val cleanUuid = atUuid?.takeIf { it.isNotBlank() }?.removePrefix("user_")
         backendScope.launch {
-            client.fork(source.id, newId, title)
+            client.fork(source.id, newId, title, cleanUuid)
                 .mapCatching { if (!it.success) error(it.error ?: "the bridge refused") }
                 .onSuccess {
+                    lytso.code.data.context.GlobalContext.copyChatSystemPrompt(source.id, newId)
                     val now = System.currentTimeMillis()
                     upsertLocal(source.copy(id = newId, sessionId = newId, title = title, createdAt = now, updatedAt = now, isRunning = false))
-                    withContext(Dispatchers.Main) { selectConversation(newId) }
+                    withContext(Dispatchers.Main) {
+                        lytso.code.ui.components.AppToastHelper.showToast(
+                            "Branched conversation",
+                            lytso.code.ui.components.ChatToastType.SUCCESS
+                        )
+                        selectConversation(newId)
+                    }
                     refreshSessions()
                 }
                 .onFailure { _controlMessages.tryEmit("Cannot fork this chat: ${it.message}") }
+        }
+    }
+
+    /** Edits a user or assistant message in place inside the Claude transcript without removing newer turns. */
+    fun editMessageInPlace(
+        message: ChatMessage,
+        newText: String,
+        onDone: (Boolean, String?) -> Unit = { _, _ -> }
+    ) {
+        val conv = store.currentConversation.value ?: return onDone(false, "No active conversation")
+        if (_isTurnActive.value || _isStreaming.value) {
+            val msg = "Stop the reply first"
+            _controlMessages.tryEmit(msg)
+            return onDone(false, msg)
+        }
+        val uuid = (message.editableEntryUuid ?: message.entryUuid ?: message.id.removePrefix("user_"))
+            .takeIf { it.isNotBlank() && !it.startsWith("asst_") }
+            ?: return onDone(false, "Message UUID unavailable")
+        val preserveHidden = message.role == lytso.code.domain.model.MessageRole.USER
+        backendScope.launch(worker) {
+            val res = client.editMessage(conv.id, uuid, newText, preserveHidden)
+                .mapCatching { if (!it.success) error(it.error ?: "Failed to update message") }
+            if (res.isFailure) {
+                val err = res.exceptionOrNull()?.message ?: "Edit failed"
+                _controlMessages.tryEmit("Cannot edit message: $err")
+                withContext(Dispatchers.Main) { onDone(false, err) }
+                return@launch
+            }
+            if (store.currentConversation.value?.id == conv.id) {
+                lytso.code.ui.chat.ChatFeedCache.invalidate(conv.id)
+                detachLocked()
+                attachedId = conv.id
+                loadAndAttach(conv.id)
+            }
+            withContext(Dispatchers.Main) {
+                lytso.code.ui.components.AppToastHelper.showToast(
+                    "Message updated in context",
+                    lytso.code.ui.components.ChatToastType.SUCCESS
+                )
+                onDone(true, null)
+            }
+        }
+    }
+
+    /** Removes a thinking/reasoning block directly from the Claude JSONL transcript. */
+    fun deleteThinkingStep(refId: String) {
+        val conv = store.currentConversation.value ?: return
+        if (_isTurnActive.value || _isStreaming.value) {
+            _controlMessages.tryEmit("Stop the reply first")
+            return
+        }
+        val parts = refId.split(":")
+        val uuid = parts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: return
+        val contentIdx = parts.getOrNull(1)?.toIntOrNull()?.takeIf { it >= 0 }
+        backendScope.launch(worker) {
+            val res = client.deleteThinking(conv.id, uuid = uuid, contentIndex = contentIdx)
+                .mapCatching { if (!it.success) error(it.error ?: "Failed to remove thinking block") }
+            if (res.isFailure) {
+                _controlMessages.tryEmit("Cannot delete thinking step: ${res.exceptionOrNull()?.message}")
+                return@launch
+            }
+            if (store.currentConversation.value?.id == conv.id) {
+                lytso.code.ui.chat.ChatFeedCache.invalidate(conv.id)
+                detachLocked()
+                attachedId = conv.id
+                loadAndAttach(conv.id)
+            }
+            withContext(Dispatchers.Main) {
+                lytso.code.ui.components.AppToastHelper.showToast(
+                    "Thinking step removed from context",
+                    lytso.code.ui.components.ChatToastType.SUCCESS
+                )
+            }
         }
     }
 

@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DataObject
 import androidx.compose.material.icons.outlined.Edit
@@ -370,6 +371,8 @@ fun UserMessageBubble(
     checkpoint: lytso.code.data.checkpoint.CheckpointSummary? = null,
     /** Opens "go back to before this message" (files and/or chat). */
     onRestoreCheckpoint: ((ChatMessage) -> Unit)? = null,
+    /** Branch / fork into a new conversation starting up through this message. */
+    onFork: ((ChatMessage) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -623,10 +626,29 @@ fun UserMessageBubble(
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Edit,
-                        contentDescription = "Undo and edit prompt",
+                        contentDescription = "Edit prompt",
                         tint = ClaudeTerracotta,
                         modifier = Modifier.size(15.dp)
                     )
+                }
+
+                // Branch / Fork Conversation from here
+                if (canEdit && onFork != null) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    IconButton(
+                        onClick = {
+                            onFork(message)
+                            showUserActions = false
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.CallSplit,
+                            contentDescription = "Branch from here",
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
                 }
 
                 // Go back to the project checkpoint saved before this message
@@ -681,6 +703,9 @@ fun AssistantMessageFooter(
     artifactsCount: Int = 0,
     /** false in a read-only chat: no "regenerate". */
     canRetry: Boolean = true,
+    onEdit: ((ChatMessage) -> Unit)? = null,
+    onFork: ((ChatMessage) -> Unit)? = null,
+    canEditInPlace: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -804,6 +829,36 @@ fun AssistantMessageFooter(
                         contentDescription = "View Artifacts ($artifactsCount)",
                         tint = ClaudeTerracotta,
                         modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            if (canEditInPlace && onEdit != null) {
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(
+                    onClick = { onEdit(message) },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = "Edit response in place",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+            }
+
+            if (canRetry && onFork != null) {
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(
+                    onClick = { onFork(message) },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.CallSplit,
+                        contentDescription = "Branch from here",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.size(15.dp)
                     )
                 }
             }

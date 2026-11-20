@@ -52,6 +52,8 @@ import exa.language_server_pb.NotifyUserConfig
 import exa.language_server_pb.PermissionInteraction
 import exa.language_server_pb.PermissionScope
 import exa.language_server_pb.ProjectEnvironmentConfig
+import exa.language_server_pb.PromptSection
+import exa.language_server_pb.PromptSectionCustomizationConfig
 import exa.language_server_pb.ResolveOutstandingStepsRequest
 import exa.language_server_pb.RunCommandToolConfig
 import exa.language_server_pb.SendUserCascadeMessageRequest
@@ -144,7 +146,8 @@ class AgyChatService {
         // media already in daemon form (a queued message sent again with "Send now")
         rawMedia: List<Media> = emptyList(),
         // a cloud chat (Remote Agents) ignores requested_model after its start; it switches models by plan_model
-        cloud: Boolean = false
+        cloud: Boolean = false,
+        customSystemPrompt: String? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
         val resolvedModelStr = resolveModelEnum(modelEnum)
         val modelProto = toModelProto(resolvedModelStr)
@@ -201,7 +204,17 @@ class AgyChatService {
                         is_google = false,
                         is_interactive = true
                     )
-                )
+                ),
+                prompt_section_customization = customSystemPrompt?.trim()?.takeIf { it.isNotBlank() }?.let { prompt ->
+                    PromptSectionCustomizationConfig(
+                        append_prompt_sections = listOf(
+                            PromptSection(
+                                title = "User System Prompt",
+                                content = prompt
+                            )
+                        )
+                    )
+                }
             ),
             delivery_strategy = deliveryStrategy,
             tags = if (clientMessageId.isNullOrBlank()) emptyList() else listOf(clientMsgTag(clientMessageId)),

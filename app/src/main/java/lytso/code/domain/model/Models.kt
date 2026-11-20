@@ -94,7 +94,17 @@ data class ChatMessage(
     /** A user message: the id its project checkpoint was saved under, when the agent's transcript knows it. */
     val checkpointKey: String? = null,
     /** A user message whose [content] the chat shows collapsed (hidden parts removed): the text as it was sent. */
-    val sentContent: String? = null
+    val sentContent: String? = null,
+    /** Step index used for inclusive fork/branch from this message (AGY). */
+    val forkStepIndex: Int? = null,
+    /** Step index of the editable text block for in-place editing (AGY USER_INPUT or last PLANNER_RESPONSE text). */
+    val editableStepIndex: Int? = null,
+    /** Clean visible text corresponding to [editableStepIndex] or [entryUuid] for in-place editing. */
+    val editableText: String? = null,
+    /** Transcript entry UUID for fork-at / in-place edit (Claude/OpenCode). */
+    val entryUuid: String? = null,
+    /** Transcript entry UUID holding editable visible text in a multi-entry assistant turn (Claude). */
+    val editableEntryUuid: String? = null
 )
 
 @Serializable

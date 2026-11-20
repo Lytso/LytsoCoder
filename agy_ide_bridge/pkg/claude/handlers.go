@@ -203,18 +203,77 @@ func (m *Manager) handleSessionREST(w http.ResponseWriter, r *http.Request, rest
 		writeJSON(w, http.StatusOK, map[string]interface{}{"success": true})
 	case action == "fork" && r.Method == http.MethodPost:
 		var body struct {
-			NewID string `json:"new_id"`
-			Title string `json:"title"`
+			NewID  string `json:"new_id"`
+			Title  string `json:"title"`
+			AtUUID string `json:"at_uuid"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || !sessionIDRe.MatchString(body.NewID) {
 			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "new_id required"})
 			return
 		}
-		if err := m.ForkSession(id, body.NewID, strings.TrimSpace(body.Title)); err != nil {
+		if body.AtUUID != "" && !sessionIDRe.MatchString(body.AtUUID) {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "invalid at_uuid"})
+			return
+		}
+		if err := m.ForkSessionAt(id, body.NewID, strings.TrimSpace(body.Title), strings.TrimSpace(body.AtUUID)); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": err.Error()})
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{"success": true})
+	case action == "edit-message" && r.Method == http.MethodPost:
+		var body struct {
+			UUID           string `json:"uuid"`
+			Text           string `json:"text"`
+			PreserveHidden *bool  `json:"preserve_hidden"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || !sessionIDRe.MatchString(body.UUID) {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "uuid required"})
+			return
+		}
+		preserve := true
+		if body.PreserveHidden != nil {
+			preserve = *body.PreserveHidden
+		}
+		if err := m.EditMessage(id, body.UUID, body.Text, preserve); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"success": true})
+	case action == "delete-thinking" && r.Method == http.MethodPost:
+		var body struct {
+			UUID         string   `json:"uuid"`
+			UUIDs        []string `json:"uuids"`
+			ContentIndex *int     `json:"content_index"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "invalid JSON"})
+			return
+		}
+		targets := body.UUIDs
+		if body.UUID != "" {
+			targets = append(targets, body.UUID)
+		}
+		if len(targets) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "uuid or uuids required"})
+			return
+		}
+		contentIdx := -1
+		if body.ContentIndex != nil {
+			contentIdx = *body.ContentIndex
+		}
+		removed := 0
+		for _, u := range targets {
+			if !sessionIDRe.MatchString(u) {
+				continue
+			}
+			n, err := m.DeleteThinking(id, u, contentIdx)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": err.Error()})
+				return
+			}
+			removed += n
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"success": true, "removed": removed})
 	case action == "kill" && r.Method == http.MethodPost:
 		if s := m.Existing(id); s != nil {
 			s.Kill()
