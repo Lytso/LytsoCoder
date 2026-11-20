@@ -365,7 +365,7 @@ class ClaudeTranscript {
                 parseTime(e.timestamp)?.let { recordCache(u, it) }
             }
         }
-        e.message.content.forEachIndexed { rawContentIdx, block ->
+        for ((rawContentIdx, block) in e.message.content.withIndex()) {
             val index = turn.blockCounts.getOrDefault(msgId, 0)
             turn.blockCounts[msgId] = index + 1
             val key = blockKey(msgId, index)
