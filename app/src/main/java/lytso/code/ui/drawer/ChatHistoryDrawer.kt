@@ -644,12 +644,14 @@ fun ChatHistoryDrawer(
                     .padding(start = 2.dp, top = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val isRainbowHeader = lytso.code.theme.ThemeManager.isRainbowAmoled
                 Text(
                     text = "LytsoCoder",
                     fontSize = 19.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = (-0.3).sp,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = if (isRainbowHeader) Color.Unspecified else MaterialTheme.colorScheme.onSurface,
+                    style = if (isRainbowHeader) TextStyle(brush = lytso.code.theme.RainbowAccent.horizontalBrush()) else LocalTextStyle.current,
                     modifier = Modifier.weight(1f)
                 )
 

@@ -308,7 +308,8 @@ object ThemeTokens {
 /** The themes that come with the app. */
 object BuiltInThemes {
     const val LIGHT_DEFAULT = "antigem_light"
-    const val DARK_DEFAULT = "midnight_aurora"
+    const val RAINBOW_AMOLED = "rainbow_amoled"
+    const val DARK_DEFAULT = RAINBOW_AMOLED
     /** The original LytsoCoder dark look (no longer the default; the id stays so a saved choice still finds it). */
     private const val ANTIGEM_DARK = "antigem_dark"
 
@@ -358,9 +359,40 @@ object BuiltInThemes {
         }
     )
 
+    /** Special true #000000 AMOLED black theme with vibrant Neon Rainbow accents and prismatic highlights. */
+    private fun rainbowAmoled() = AppTheme(
+        id = RAINBOW_AMOLED, name = "Rainbow AMOLED", dark = true, builtIn = true,
+        about = "True #000000 AMOLED black with vibrant neon rainbow accents and prismatic highlights",
+        colors = linkedMapOf(
+            "primary" to 0xFF00E5FF, "on_primary" to 0xFF04080F, "primary_container" to 0xFF062C38, "on_primary_container" to 0xFF8FF4FF,
+            "secondary" to 0xFFFF2A85, "on_secondary" to 0xFF0D040A, "secondary_container" to 0xFF3A0A22, "on_secondary_container" to 0xFFFF9ACA,
+            "tertiary" to 0xFF00F5A0, "on_tertiary" to 0xFF03140D, "tertiary_container" to 0xFF053322, "on_tertiary_container" to 0xFF8CFFD4,
+            "background" to 0xFF000000, "on_background" to 0xFFF5F7FF, "surface" to 0xFF000000, "on_surface" to 0xFFF5F7FF,
+            "surface_variant" to 0xFF141422, "on_surface_variant" to 0xFFA2A8C4, "surface_container_lowest" to 0xFF000000,
+            "surface_container_low" to 0xFF07070C, "surface_container" to 0xFF0B0B12, "surface_container_high" to 0xFF131320,
+            "surface_container_highest" to 0xFF1B1B2C, "outline" to 0xFF3E4266, "outline_variant" to 0xFF1C1E30, "error" to 0xFFFF3B6B,
+            "on_error" to 0xFF140308, "error_container" to 0xFF3D0A1A, "on_error_container" to 0xFFFF9CB4, "inverse_surface" to 0xFFF5F7FF,
+            "inverse_on_surface" to 0xFF000000, "inverse_primary" to 0xFF00E5FF, "card" to 0xFF0B0B12, "text_secondary" to 0xFFA2A8C4,
+            "user_bubble" to 0xFF17132B, "thinking_bg" to 0xFF0A0A13, "code_bg" to 0xFF050509, "code_text" to 0xFFEDF2FF, "success" to 0xFF00F5A0,
+            "warning" to 0xFFFFE600, "danger" to 0xFFFF3B6B, "info" to 0xFF38BDF8, "accent_alt" to 0xFFB366FF, "syntax_keyword" to 0xFFFF4DA6,
+            "syntax_type" to 0xFF00E5FF, "syntax_string" to 0xFF00F5A0, "syntax_number" to 0xFFFFB800, "syntax_comment" to 0xFF6E7699,
+            "syntax_function" to 0xFFB366FF, "syntax_annotation" to 0xFFFFE600, "syntax_punctuation" to 0xFFC5CBE3, "syntax_control" to 0xFFFF4DA6,
+            "syntax_tag" to 0xFFB366FF, "syntax_attribute" to 0xFF00E5FF, "border" to 0xFF23253A, "fill" to 0xFF141524,
+            "success_container" to 0xFF062E20, "warning_container" to 0xFF332B05, "danger_container" to 0xFF3A0B1A, "info_container" to 0xFF092538,
+            "accent_indigo" to 0xFF7C5CFF, "accent_teal" to 0xFF00F0D4, "accent_pink" to 0xFFFF2A85, "editor_bg" to 0xFF000000,
+            "editor_panel" to 0xFF08080F, "editor_text" to 0xFFEDF2FF, "editor_muted" to 0xFF6E7699, "editor_border" to 0xFF1E2033,
+            "editor_selection" to 0xFF0A3948, "editor_line" to 0xFF0E0F1A, "editor_added_bg" to 0xFF072E1F, "editor_added_text" to 0xFF8CFFD4,
+            "editor_removed_bg" to 0xFF3B0C1C, "editor_removed_text" to 0xFFFFA3BA, "editor_info_bg" to 0xFF0A243B, "editor_info_text" to 0xFF8FD9FF,
+            "terminal_bg" to 0xFF000000, "terminal_fg" to 0xFFF5F7FF, "terminal_cursor" to 0xFF00E5FF, "ansi_0" to 0xFF1A1C2A,
+            "ansi_1" to 0xFFFF3B6B, "ansi_2" to 0xFF00F5A0, "ansi_3" to 0xFFFFE600, "ansi_4" to 0xFF38BDF8, "ansi_5" to 0xFFB366FF,
+            "ansi_6" to 0xFF00E5FF, "ansi_7" to 0xFFD9E0F5, "ansi_8" to 0xFF636B8A, "ansi_9" to 0xFFFF7597, "ansi_10" to 0xFF66FFC9,
+            "ansi_11" to 0xFFFFF066, "ansi_12" to 0xFF7DD3FC, "ansi_13" to 0xFFD1A3FF, "ansi_14" to 0xFF70F3FF, "ansi_15" to 0xFFFFFFFF
+        )
+    )
+
     /** The default dark theme: every color set by hand (first made as a custom theme in the app, then exported). */
     private fun midnightAurora() = AppTheme(
-        id = DARK_DEFAULT, name = "Midnight Aurora", dark = true, builtIn = true,
+        id = "midnight_aurora", name = "Midnight Aurora", dark = true, builtIn = true,
         about = "Deep ink-blue midnight with luminous violet, aurora teal and rose accents",
         colors = linkedMapOf(
             "primary" to 0xFFA78BFA, "on_primary" to 0xFF14102B, "primary_container" to 0xFF373256, "on_primary_container" to 0xFFC4B5FE,
@@ -438,7 +470,8 @@ object BuiltInThemes {
                 0xFFFDF6E3, 0xFFFDF6E3, 0xFFFFFBEF, 0xFFEEE8D5, 0xFF073642, 0xFF586E75,
                 0xFF268BD2, 0xFF2AA198, 0xFF6C71C4, 0xFF859900, 0xFFB58900, 0xFFDC322F, 0xFF268BD2,
                 0xFF002B36, listOf(0xFF859900, 0xFFB58900, 0xFF2AA198, 0xFFD33682, 0xFF657B83, 0xFF268BD2, 0xFFCB4B16, 0xFF93A1A1)),
-            // dark: the same
+            // dark: Rainbow AMOLED default first, then Midnight Aurora
+            rainbowAmoled(),
             midnightAurora(),
             seeded("obsidian", "Obsidian", "Refined deep black with layered surfaces and a soft periwinkle glow", true,
                 0xFF0D0E12, 0xFF0D0E12, 0xFF16181D, 0xFF1F2229, 0xFFECEDF0, 0xFF9297A3,

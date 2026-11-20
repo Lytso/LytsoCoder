@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Splash background: graphite, matching the icon (splash_colors.xml) -->
+    <!-- Splash background: AMOLED obsidian matching the minimalist >_ icon (splash_colors.xml) -->
     <item android:drawable="@color/splash_bg" />
 
-    <!-- Centered Prism mark, the same size as the Android 12+ splash icon -->
+    <!-- Centered Neon Rainbow >_ mark, the same size as the Android 12+ splash icon -->
     <item
         android:gravity="center"
         android:width="288dp"

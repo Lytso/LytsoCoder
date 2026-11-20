@@ -57,6 +57,7 @@ You can enable or disable each agent independently during onboarding or in **Set
 - **OpenCode & Claude Code BYO Endpoints**: Presets and custom base URLs for OpenRouter, Moonshot/Kimi, DeepSeek, Z.ai (GLM), Ollama, LM Studio, or any OpenAI/Anthropic-compatible server.
 - **Multi-Account AGY Switcher & Live Watcher**: Manage and switch multiple saved `agy` accounts cleanly without restarting the app.
 - **Elephant-Goldfish Method (`EGM`) & Gemmy**: Built-in `/egm`, `/egm-lite`, and `/egm-review` adversarial planning workflows, pinned chats drawer section, and optional **Gemmy** floating companion.
+- **Rainbow AMOLED Special Theme & Minimalist Neon `>_` Emblem**: True `#000000` AMOLED surfaces with prismatic Neon Rainbow accents (`Settings → Themes`) matching the app and README icon.
 - Image/file attachments, voice dictation, STEM/LaTeX/Mermaid/TikZJax rendering, floating bubble, and **Jarvis** hands-free control ([docs/jarvis.md](docs/jarvis.md)).
 
 ### Built-in MCP Servers

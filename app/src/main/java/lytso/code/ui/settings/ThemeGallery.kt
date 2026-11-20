@@ -101,15 +101,40 @@ internal fun ThemeCard(t: AppTheme, selected: Boolean, cardBg: Color, modifier: 
     val c = remember(t) { ThemeManager.resolvedColors(t).mapValues { Color(it.value.toInt()) } }
     fun col(k: String, d: Color = Color.Gray) = c[k] ?: d
     val accent = MaterialTheme.colorScheme.primary
+    val isRainbow = t.id == BuiltInThemes.RAINBOW_AMOLED
     val shape = RoundedCornerShape(14.dp)
     Column(
         modifier
             .clip(shape)
             .background(cardBg)
-            .border(if (selected) 2.dp else 1.dp, if (selected) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), shape)
+            .then(
+                if (isRainbow) {
+                    Modifier.border(
+                        width = if (selected) 2.dp else 1.25.dp,
+                        brush = lytso.code.theme.RainbowAccent.horizontalBrush(if (selected) 1f else 0.75f),
+                        shape = shape
+                    )
+                } else {
+                    Modifier.border(
+                        if (selected) 2.dp else 1.dp,
+                        if (selected) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                        shape
+                    )
+                }
+            )
             .clickable { onClick() }
     ) {
-        Box(Modifier.fillMaxWidth().height(84.dp).background(col("background")).padding(8.dp)) {
+        Box(Modifier.fillMaxWidth().height(84.dp).background(col("background"))) {
+            if (isRainbow) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(2.5.dp)
+                        .align(Alignment.TopCenter)
+                        .background(lytso.code.theme.RainbowAccent.horizontalBrush())
+                )
+            }
+            Box(Modifier.fillMaxSize().padding(8.dp)) {
             // a card with two text lines and a button
             Column(
                 Modifier.fillMaxWidth(0.72f).clip(RoundedCornerShape(8.dp)).background(col("card", col("surface"))).padding(7.dp),
@@ -151,12 +176,17 @@ internal fun ThemeCard(t: AppTheme, selected: Boolean, cardBg: Color, modifier: 
                     Icon(Icons.Filled.Star, "Default theme", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(11.dp))
                 }
             }
+            }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(t.name, fontSize = 12.5.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface)
-                if (!t.builtIn) Text("Custom", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                if (isRainbow) {
+                    Text("Special · AMOLED", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f))
+                } else if (!t.builtIn) {
+                    Text("Custom", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                }
             }
             if (onDelete != null) {
                 Icon(Icons.Outlined.Delete, "Delete", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),

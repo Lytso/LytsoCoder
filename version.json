@@ -1,13 +1,14 @@
 {
-  "version_code": 133,
-  "version_name": "2.0.2",
+  "version_code": 134,
+  "version_name": "2.0.3",
   "min_supported_version_code": 2,
   "changelog": [
-    "Added x86_64 support for emulators and Chromebooks (-Pabi=x86_64, per-ABI glibc runtime, x86_64 seccomp shim, and Linux x64 agy launcher)",
-    "Synced multi-account Antigravity CLI login switcher, EGM (Elephant-Goldfish Model), Gemmy mascot, Pinned Chats, and Compose BOM 2026.11.01 keyboard crash fix",
-    "Redesigned LytsoCoder app emblem and animated splash with vivid Neon Rainbow glow",
-    "Kept Enhanced Conversation Control (editable context/system prompts, in-place message editing, thinking & artifact pruning, message branching)",
-    "Kept Android 11+ seccomp-safe Go bridge process management (pkg/procutil) and zero-disconnect brain sync"
+    "Introduced minimalist Neon Rainbow terminal (>_ ) logo unified across launcher icon, splash animation, and README",
+    "Added special Rainbow AMOLED dark theme with true #000000 AMOLED surfaces and prismatic neon UI accents",
+    "Published signed non-debug Release APKs for both arm64 and x86_64",
+    "Added x86_64 support for emulators and Chromebooks (-Pabi=x86_64, per-ABI glibc runtime, seccomp shim, Linux x64 agy launcher)",
+    "Synced multi-account AGY switcher, EGM (/egm), Gemmy mascot, Pinned Chats, and Compose BOM 2026.11.01",
+    "Kept Enhanced Conversation Control and Android 11+ seccomp-safe Go bridge process management (pkg/procutil)"
   ],
   "is_critical": false
 }

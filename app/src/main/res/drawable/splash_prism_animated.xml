@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 12+ splash icon: the LytsoCoder Neon Rainbow mark animated.
-     All elements are visible from frame 0 for instant readiness while the rainbow bloom and cursor animate:
-     0-450 ms   neon frame, ambient rainbow aura, chevron and spark orb bloom into full radiance
-     500 ms+    halo breathes smoothly and the '_' cursor bar pulses softly until launch completes -->
+<!-- Android 12+ animated splash icon: minimalist Neon Rainbow terminal prompt (>_).
+     All geometry is visible from frame 0, with subtle neon bloom entrance + breathing glow
+     and gentle terminal cursor pulse. -->
 <animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt">
 
@@ -13,334 +12,230 @@
             android:viewportWidth="108"
             android:viewportHeight="108">
 
-            <!-- Inner dark squircle -->
-            <path android:pathData="M42,25H66A17,17 0,0 1,83 42V66A17,17 0,0 1,66 83H42A17,17 0,0 1,25 66V42A17,17 0,0 1,42 25Z">
-                <aapt:attr name="android:fillColor">
-                    <gradient
-                        android:type="linear"
-                        android:startX="25"
-                        android:startY="25"
-                        android:endX="83"
-                        android:endY="83">
-                        <item android:offset="0" android:color="#D90B0E1D" />
-                        <item android:offset="0.5" android:color="#EB11162B" />
-                        <item android:offset="1" android:color="#E0070913" />
-                    </gradient>
-                </aapt:attr>
-            </path>
-
-            <!-- Breathing neon rainbow frame halos -->
+            <!-- Subtle neon bloom behind '>' & '_' -->
             <group
-                android:name="neon_halo_group"
+                android:name="glow_group"
                 android:pivotX="54"
-                android:pivotY="54"
-                android:scaleX="0.96"
-                android:scaleY="0.96">
-                <path
-                    android:name="frame_outer_glow"
-                    android:strokeAlpha="0.35"
-                    android:pathData="M42,25H66A17,17 0,0 1,83 42V66A17,17 0,0 1,66 83H42A17,17 0,0 1,25 66V42A17,17 0,0 1,42 25Z"
-                    android:strokeWidth="4.4"
-                    android:strokeLineJoin="round">
-                    <aapt:attr name="android:strokeColor">
-                        <gradient
-                            android:type="linear"
-                            android:startX="25"
-                            android:startY="25"
-                            android:endX="83"
-                            android:endY="83">
-                            <item android:offset="0" android:color="#38FF0080" />
-                            <item android:offset="0.18" android:color="#38FF6B00" />
-                            <item android:offset="0.35" android:color="#38FFE600" />
-                            <item android:offset="0.52" android:color="#3800FF88" />
-                            <item android:offset="0.70" android:color="#3800E5FF" />
-                            <item android:offset="0.86" android:color="#389D4EDD" />
-                            <item android:offset="1" android:color="#38FF00C8" />
-                        </gradient>
-                    </aapt:attr>
-                </path>
-                <path
-                    android:name="frame_mid_glow"
-                    android:strokeAlpha="0.5"
-                    android:pathData="M42,25H66A17,17 0,0 1,83 42V66A17,17 0,0 1,66 83H42A17,17 0,0 1,25 66V42A17,17 0,0 1,42 25Z"
-                    android:strokeWidth="2.8"
-                    android:strokeLineJoin="round">
-                    <aapt:attr name="android:strokeColor">
-                        <gradient
-                            android:type="linear"
-                            android:startX="25"
-                            android:startY="25"
-                            android:endX="83"
-                            android:endY="83">
-                            <item android:offset="0" android:color="#7DFF0080" />
-                            <item android:offset="0.18" android:color="#7DFF6B00" />
-                            <item android:offset="0.35" android:color="#7DFFE600" />
-                            <item android:offset="0.52" android:color="#7D00FF88" />
-                            <item android:offset="0.70" android:color="#7D00E5FF" />
-                            <item android:offset="0.86" android:color="#7D9D4EDD" />
-                            <item android:offset="1" android:color="#7DFF00C8" />
-                        </gradient>
-                    </aapt:attr>
-                </path>
-            </group>
-
-            <!-- Crisp primary rainbow frame + hot filament -->
-            <path
-                android:pathData="M42,25H66A17,17 0,0 1,83 42V66A17,17 0,0 1,66 83H42A17,17 0,0 1,25 66V42A17,17 0,0 1,42 25Z"
-                android:strokeWidth="1.65"
-                android:strokeLineJoin="round">
-                <aapt:attr name="android:strokeColor">
-                    <gradient
-                        android:type="linear"
-                        android:startX="25"
-                        android:startY="25"
-                        android:endX="83"
-                        android:endY="83">
-                        <item android:offset="0" android:color="#FFFF0080" />
-                        <item android:offset="0.18" android:color="#FFFF6B00" />
-                        <item android:offset="0.35" android:color="#FFFFE600" />
-                        <item android:offset="0.52" android:color="#FF00FF88" />
-                        <item android:offset="0.70" android:color="#FF00E5FF" />
-                        <item android:offset="0.86" android:color="#FF9D4EDD" />
-                        <item android:offset="1" android:color="#FFFF00C8" />
-                    </gradient>
-                </aapt:attr>
-            </path>
-            <path
-                android:pathData="M42,25H66A17,17 0,0 1,83 42V66A17,17 0,0 1,66 83H42A17,17 0,0 1,25 66V42A17,17 0,0 1,42 25Z"
-                android:strokeColor="#8CFFFFFF"
-                android:strokeWidth="0.5"
-                android:strokeLineJoin="round" />
-
-            <!-- Chevron '>' group -->
-            <group
-                android:name="chevron_group"
-                android:pivotX="45"
                 android:pivotY="54"
                 android:scaleX="0.92"
                 android:scaleY="0.92">
                 <path
-                    android:pathData="M39.5,44.5L50.5,54L39.5,63.5"
-                    android:strokeWidth="7.4"
+                    android:name="chev_wide"
+                    android:pathData="M33,41L47.5,54L33,67"
+                    android:strokeWidth="13.5"
                     android:strokeLineCap="round"
                     android:strokeLineJoin="round">
                     <aapt:attr name="android:strokeColor">
-                        <gradient
-                            android:type="linear"
-                            android:startX="39"
-                            android:startY="44"
-                            android:endX="51"
-                            android:endY="64">
-                            <item android:offset="0" android:color="#40FF0099" />
-                            <item android:offset="0.35" android:color="#4000E5FF" />
-                            <item android:offset="0.7" android:color="#4000FF88" />
-                            <item android:offset="1" android:color="#40FFE600" />
+                        <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                            <item android:offset="0" android:color="#16FF2A85" />
+                            <item android:offset="0.22" android:color="#16FF7A00" />
+                            <item android:offset="0.42" android:color="#16FFE600" />
+                            <item android:offset="0.62" android:color="#1600F5A0" />
+                            <item android:offset="0.82" android:color="#1600D9FF" />
+                            <item android:offset="1" android:color="#169B5CFF" />
                         </gradient>
                     </aapt:attr>
                 </path>
                 <path
-                    android:pathData="M39.5,44.5L50.5,54L39.5,63.5"
-                    android:strokeWidth="5.2"
-                    android:strokeLineCap="round"
-                    android:strokeLineJoin="round">
+                    android:name="bar_wide"
+                    android:pathData="M54,67L75,67"
+                    android:strokeWidth="13.5"
+                    android:strokeLineCap="round">
                     <aapt:attr name="android:strokeColor">
-                        <gradient
-                            android:type="linear"
-                            android:startX="39"
-                            android:startY="44"
-                            android:endX="51"
-                            android:endY="64">
-                            <item android:offset="0" android:color="#99FF0099" />
-                            <item android:offset="0.35" android:color="#9900E5FF" />
-                            <item android:offset="0.7" android:color="#9900FF88" />
-                            <item android:offset="1" android:color="#99FFE600" />
+                        <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                            <item android:offset="0" android:color="#16FF2A85" />
+                            <item android:offset="0.22" android:color="#16FF7A00" />
+                            <item android:offset="0.42" android:color="#16FFE600" />
+                            <item android:offset="0.62" android:color="#1600F5A0" />
+                            <item android:offset="0.82" android:color="#1600D9FF" />
+                            <item android:offset="1" android:color="#169B5CFF" />
                         </gradient>
                     </aapt:attr>
                 </path>
                 <path
-                    android:pathData="M39.5,44.5L50.5,54L39.5,63.5"
-                    android:strokeColor="#FFF8FAFC"
-                    android:strokeWidth="3.8"
+                    android:name="chev_soft"
+                    android:pathData="M33,41L47.5,54L33,67"
+                    android:strokeWidth="10.0"
                     android:strokeLineCap="round"
-                    android:strokeLineJoin="round" />
+                    android:strokeLineJoin="round">
+                    <aapt:attr name="android:strokeColor">
+                        <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                            <item android:offset="0" android:color="#28FF2A85" />
+                            <item android:offset="0.22" android:color="#28FF7A00" />
+                            <item android:offset="0.42" android:color="#28FFE600" />
+                            <item android:offset="0.62" android:color="#2800F5A0" />
+                            <item android:offset="0.82" android:color="#2800D9FF" />
+                            <item android:offset="1" android:color="#289B5CFF" />
+                        </gradient>
+                    </aapt:attr>
+                </path>
+                <path
+                    android:name="bar_soft"
+                    android:pathData="M54,67L75,67"
+                    android:strokeWidth="10.0"
+                    android:strokeLineCap="round">
+                    <aapt:attr name="android:strokeColor">
+                        <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                            <item android:offset="0" android:color="#28FF2A85" />
+                            <item android:offset="0.22" android:color="#28FF7A00" />
+                            <item android:offset="0.42" android:color="#28FFE600" />
+                            <item android:offset="0.62" android:color="#2800F5A0" />
+                            <item android:offset="0.82" android:color="#2800D9FF" />
+                            <item android:offset="1" android:color="#289B5CFF" />
+                        </gradient>
+                    </aapt:attr>
+                </path>
+                <path
+                    android:name="chev_mid"
+                    android:pathData="M33,41L47.5,54L33,67"
+                    android:strokeWidth="7.2"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round">
+                    <aapt:attr name="android:strokeColor">
+                        <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                            <item android:offset="0" android:color="#58FF2A85" />
+                            <item android:offset="0.22" android:color="#58FF7A00" />
+                            <item android:offset="0.42" android:color="#58FFE600" />
+                            <item android:offset="0.62" android:color="#5800F5A0" />
+                            <item android:offset="0.82" android:color="#5800D9FF" />
+                            <item android:offset="1" android:color="#589B5CFF" />
+                        </gradient>
+                    </aapt:attr>
+                </path>
+                <path
+                    android:name="bar_mid"
+                    android:pathData="M54,67L75,67"
+                    android:strokeWidth="7.2"
+                    android:strokeLineCap="round">
+                    <aapt:attr name="android:strokeColor">
+                        <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                            <item android:offset="0" android:color="#58FF2A85" />
+                            <item android:offset="0.22" android:color="#58FF7A00" />
+                            <item android:offset="0.42" android:color="#58FFE600" />
+                            <item android:offset="0.62" android:color="#5800F5A0" />
+                            <item android:offset="0.82" android:color="#5800D9FF" />
+                            <item android:offset="1" android:color="#589B5CFF" />
+                        </gradient>
+                    </aapt:attr>
+                </path>
             </group>
 
-            <!-- Prompt cursor bar '_' pulsing softly -->
+            <!-- Crisp primary neon tube + filament -->
             <path
-                android:name="cursor_halo_path"
-                android:pathData="M53.5,63.5L68.5,63.5"
-                android:strokeWidth="7.4"
-                android:strokeLineCap="round">
+                android:pathData="M33,41L47.5,54L33,67"
+                android:strokeWidth="4.8"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round">
                 <aapt:attr name="android:strokeColor">
-                    <gradient
-                        android:type="linear"
-                        android:startX="53"
-                        android:startY="63.5"
-                        android:endX="69"
-                        android:endY="63.5">
-                        <item android:offset="0" android:color="#42FFE600" />
-                        <item android:offset="0.35" android:color="#4200FF88" />
-                        <item android:offset="0.7" android:color="#4200E5FF" />
-                        <item android:offset="1" android:color="#42FF00C8" />
+                    <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                        <item android:offset="0" android:color="#FFFF2A85" />
+                        <item android:offset="0.22" android:color="#FFFF7A00" />
+                        <item android:offset="0.42" android:color="#FFFFE600" />
+                        <item android:offset="0.62" android:color="#FF00F5A0" />
+                        <item android:offset="0.82" android:color="#FF00D9FF" />
+                        <item android:offset="1" android:color="#FF9B5CFF" />
                     </gradient>
                 </aapt:attr>
             </path>
             <path
-                android:name="cursor_bar_path"
-                android:pathData="M53.5,63.5L68.5,63.5"
-                android:strokeWidth="4.0"
-                android:strokeLineCap="round">
-                <aapt:attr name="android:strokeColor">
-                    <gradient
-                        android:type="linear"
-                        android:startX="53"
-                        android:startY="63.5"
-                        android:endX="69"
-                        android:endY="63.5">
-                        <item android:offset="0" android:color="#FFFFE600" />
-                        <item android:offset="0.35" android:color="#FF00FF88" />
-                        <item android:offset="0.7" android:color="#FF00E5FF" />
-                        <item android:offset="1" android:color="#FFFF00C8" />
-                    </gradient>
-                </aapt:attr>
-            </path>
-            <path
-                android:name="cursor_core_path"
-                android:pathData="M53.5,63.5L68.5,63.5"
+                android:pathData="M33,41L47.5,54L33,67"
                 android:strokeColor="#B8FFFFFF"
-                android:strokeWidth="1.25"
-                android:strokeLineCap="round" />
+                android:strokeWidth="1.2"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round" />
 
-            <!-- Spark orb group -->
-            <group
-                android:name="spark_orb_group"
-                android:pivotX="66"
-                android:pivotY="44"
-                android:scaleX="0.78"
-                android:scaleY="0.78">
-                <path
-                    android:name="spark_aura_path"
-                    android:fillAlpha="0.4"
-                    android:pathData="M57,44A9,9 0,1 0,75 44A9,9 0,1 0,57 44Z">
-                    <aapt:attr name="android:fillColor">
-                        <gradient
-                            android:type="radial"
-                            android:centerX="66"
-                            android:centerY="44"
-                            android:gradientRadius="9">
-                            <item android:offset="0" android:color="#A600E5FF" />
-                            <item android:offset="0.48" android:color="#52FF00C8" />
-                            <item android:offset="1" android:color="#00FF00C8" />
-                        </gradient>
-                    </aapt:attr>
-                </path>
-                <path android:pathData="M62.8,44A3.2,3.2 0,1 0,69.2 44A3.2,3.2 0,1 0,62.8 44Z">
-                    <aapt:attr name="android:fillColor">
-                        <gradient
-                            android:type="linear"
-                            android:startX="62.8"
-                            android:startY="40.8"
-                            android:endX="69.2"
-                            android:endY="47.2">
-                            <item android:offset="0" android:color="#FFFF0099" />
-                            <item android:offset="0.4" android:color="#FFFFE600" />
-                            <item android:offset="0.75" android:color="#FF00FF88" />
-                            <item android:offset="1" android:color="#FF00E5FF" />
-                        </gradient>
-                    </aapt:attr>
-                </path>
-                <path
-                    android:fillColor="#EBFFFFFF"
-                    android:pathData="M64.65,44A1.35,1.35 0,1 0,67.35 44A1.35,1.35 0,1 0,64.65 44Z" />
-            </group>
+            <!-- Cursor '_' tube + filament (pulses gently) -->
+            <path
+                android:name="bar_tube"
+                android:pathData="M54,67L75,67"
+                android:strokeWidth="4.8"
+                android:strokeLineCap="round">
+                <aapt:attr name="android:strokeColor">
+                    <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                        <item android:offset="0" android:color="#FFFF2A85" />
+                        <item android:offset="0.22" android:color="#FFFF7A00" />
+                        <item android:offset="0.42" android:color="#FFFFE600" />
+                        <item android:offset="0.62" android:color="#FF00F5A0" />
+                        <item android:offset="0.82" android:color="#FF00D9FF" />
+                        <item android:offset="1" android:color="#FF9B5CFF" />
+                    </gradient>
+                </aapt:attr>
+            </path>
+            <path
+                android:name="bar_core"
+                android:pathData="M54,67L75,67"
+                android:strokeColor="#B8FFFFFF"
+                android:strokeWidth="1.2"
+                android:strokeLineCap="round" />
         </vector>
     </aapt:attr>
 
-    <!-- 0-420 ms: outer neon halo blooms and settles -->
-    <target android:name="neon_halo_group">
+    <!-- 0-420 ms: subtle halo bloom 0.92 -> 1.04 -> 1.0 -->
+    <target android:name="glow_group">
         <aapt:attr name="android:animation">
             <objectAnimator
                 android:duration="420"
                 android:interpolator="@android:interpolator/linear">
                 <propertyValuesHolder android:propertyName="scaleX" android:valueType="floatType">
-                    <keyframe android:fraction="0" android:value="0.96" />
-                    <keyframe android:fraction="0.6" android:value="1.03" android:interpolator="@interpolator/splash_soft" />
+                    <keyframe android:fraction="0" android:value="0.92" />
+                    <keyframe android:fraction="0.6" android:value="1.04" android:interpolator="@interpolator/splash_soft" />
                     <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/splash_ease" />
                 </propertyValuesHolder>
                 <propertyValuesHolder android:propertyName="scaleY" android:valueType="floatType">
-                    <keyframe android:fraction="0" android:value="0.96" />
-                    <keyframe android:fraction="0.6" android:value="1.03" android:interpolator="@interpolator/splash_soft" />
+                    <keyframe android:fraction="0" android:value="0.92" />
+                    <keyframe android:fraction="0.6" android:value="1.04" android:interpolator="@interpolator/splash_soft" />
                     <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/splash_ease" />
                 </propertyValuesHolder>
             </objectAnimator>
         </aapt:attr>
     </target>
 
-    <!-- Frame outer/mid neon alpha bloom then gentle breathing -->
-    <target android:name="frame_outer_glow">
-        <aapt:attr name="android:animation">
-            <set android:ordering="together">
-                <objectAnimator
-                    android:propertyName="strokeAlpha"
-                    android:valueFrom="0.35"
-                    android:valueTo="1"
-                    android:valueType="floatType"
-                    android:duration="350"
-                    android:interpolator="@interpolator/splash_soft" />
-                <objectAnimator
-                    android:propertyName="strokeAlpha"
-                    android:valueFrom="1"
-                    android:valueTo="0.6"
-                    android:valueType="floatType"
-                    android:duration="1200"
-                    android:startOffset="500"
-                    android:repeatCount="infinite"
-                    android:repeatMode="reverse"
-                    android:interpolator="@interpolator/splash_ease" />
-            </set>
-        </aapt:attr>
-    </target>
-
-    <target android:name="frame_mid_glow">
-        <aapt:attr name="android:animation">
-            <objectAnimator
-                android:propertyName="strokeAlpha"
-                android:valueFrom="0.5"
-                android:valueTo="1"
-                android:valueType="floatType"
-                android:duration="350"
-                android:interpolator="@interpolator/splash_soft" />
-        </aapt:attr>
-    </target>
-
-    <!-- Chevron crisp entrance -->
-    <target android:name="chevron_group">
-        <aapt:attr name="android:animation">
-            <objectAnimator
-                android:duration="380"
-                android:interpolator="@interpolator/splash_soft">
-                <propertyValuesHolder android:propertyName="scaleX" android:valueFrom="0.92" android:valueTo="1" android:valueType="floatType" />
-                <propertyValuesHolder android:propertyName="scaleY" android:valueFrom="0.92" android:valueTo="1" android:valueType="floatType" />
-            </objectAnimator>
-        </aapt:attr>
-    </target>
-
-    <!-- Terminal cursor '_' gentle neon pulse -->
-    <target android:name="cursor_bar_path">
+    <!-- Chevron halos breathe 1.0 <-> 0.55 after 450 ms -->
+    <target android:name="chev_wide">
         <aapt:attr name="android:animation">
             <objectAnimator
                 android:propertyName="strokeAlpha"
                 android:valueFrom="1"
-                android:valueTo="0.48"
+                android:valueTo="0.55"
                 android:valueType="floatType"
-                android:duration="750"
+                android:duration="1200"
                 android:startOffset="450"
                 android:repeatCount="infinite"
                 android:repeatMode="reverse"
                 android:interpolator="@interpolator/splash_ease" />
         </aapt:attr>
     </target>
-    <target android:name="cursor_core_path">
+    <target android:name="chev_mid">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="strokeAlpha"
+                android:valueFrom="1"
+                android:valueTo="0.55"
+                android:valueType="floatType"
+                android:duration="1200"
+                android:startOffset="450"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:interpolator="@interpolator/splash_ease" />
+        </aapt:attr>
+    </target>
+    <target android:name="chev_soft">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="strokeAlpha"
+                android:valueFrom="1"
+                android:valueTo="0.55"
+                android:valueType="floatType"
+                android:duration="1200"
+                android:startOffset="450"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:interpolator="@interpolator/splash_ease" />
+        </aapt:attr>
+    </target>
+
+    <!-- Terminal cursor '_' gentle neon pulse 1.0 <-> 0.35 -->
+    <target android:name="bar_wide">
         <aapt:attr name="android:animation">
             <objectAnimator
                 android:propertyName="strokeAlpha"
@@ -354,12 +249,12 @@
                 android:interpolator="@interpolator/splash_ease" />
         </aapt:attr>
     </target>
-    <target android:name="cursor_halo_path">
+    <target android:name="bar_mid">
         <aapt:attr name="android:animation">
             <objectAnimator
                 android:propertyName="strokeAlpha"
                 android:valueFrom="1"
-                android:valueTo="0.5"
+                android:valueTo="0.35"
                 android:valueType="floatType"
                 android:duration="750"
                 android:startOffset="450"
@@ -368,47 +263,46 @@
                 android:interpolator="@interpolator/splash_ease" />
         </aapt:attr>
     </target>
-
-    <!-- Spark orb pop and aura breath -->
-    <target android:name="spark_orb_group">
+    <target android:name="bar_soft">
         <aapt:attr name="android:animation">
             <objectAnimator
-                android:duration="450"
-                android:interpolator="@android:interpolator/linear">
-                <propertyValuesHolder android:propertyName="scaleX" android:valueType="floatType">
-                    <keyframe android:fraction="0" android:value="0.78" />
-                    <keyframe android:fraction="0.65" android:value="1.15" android:interpolator="@interpolator/splash_soft" />
-                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/splash_ease" />
-                </propertyValuesHolder>
-                <propertyValuesHolder android:propertyName="scaleY" android:valueType="floatType">
-                    <keyframe android:fraction="0" android:value="0.78" />
-                    <keyframe android:fraction="0.65" android:value="1.15" android:interpolator="@interpolator/splash_soft" />
-                    <keyframe android:fraction="1" android:value="1" android:interpolator="@interpolator/splash_ease" />
-                </propertyValuesHolder>
-            </objectAnimator>
+                android:propertyName="strokeAlpha"
+                android:valueFrom="1"
+                android:valueTo="0.35"
+                android:valueType="floatType"
+                android:duration="750"
+                android:startOffset="450"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:interpolator="@interpolator/splash_ease" />
         </aapt:attr>
     </target>
-    <target android:name="spark_aura_path">
+    <target android:name="bar_tube">
         <aapt:attr name="android:animation">
-            <set android:ordering="together">
-                <objectAnimator
-                    android:propertyName="fillAlpha"
-                    android:valueFrom="0.4"
-                    android:valueTo="1"
-                    android:valueType="floatType"
-                    android:duration="300"
-                    android:interpolator="@interpolator/splash_soft" />
-                <objectAnimator
-                    android:propertyName="fillAlpha"
-                    android:valueFrom="1"
-                    android:valueTo="0.55"
-                    android:valueType="floatType"
-                    android:duration="1100"
-                    android:startOffset="500"
-                    android:repeatCount="infinite"
-                    android:repeatMode="reverse"
-                    android:interpolator="@interpolator/splash_ease" />
-            </set>
+            <objectAnimator
+                android:propertyName="strokeAlpha"
+                android:valueFrom="1"
+                android:valueTo="0.35"
+                android:valueType="floatType"
+                android:duration="750"
+                android:startOffset="450"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:interpolator="@interpolator/splash_ease" />
+        </aapt:attr>
+    </target>
+    <target android:name="bar_core">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="strokeAlpha"
+                android:valueFrom="1"
+                android:valueTo="0.35"
+                android:valueType="floatType"
+                android:duration="750"
+                android:startOffset="450"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:interpolator="@interpolator/splash_ease" />
         </aapt:attr>
     </target>
 </animated-vector>

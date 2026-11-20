@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- LytsoCoder Neon Rainbow mark: >_ terminal chevron, glowing cursor bar, spark orb inside a rainbow neon squircle.
-     108-unit adaptive-icon canvas; all visible geometry fits within r < 36 (corner max radius 33.97)
-     so both circle launcher masks and AppIconImage (1.5x center crop) preserve every neon edge. -->
+<!-- LytsoCoder minimalist Neon Rainbow terminal prompt (>_).
+     Exact shared geometry and 6-stop rainbow gradient matching docs/readme/lytsocoder-icon.svg
+     inside the 108dp adaptive-icon safe area [18..90], using 6 micro-stepped neon layers for blur-smooth glow. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
@@ -9,248 +9,146 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Subtle dark inner squircle surface to sharpen neon contrast -->
-    <path android:pathData="M42,25H66A17,17 0,0 1,83 42V66A17,17 0,0 1,66 83H42A17,17 0,0 1,25 66V42A17,17 0,0 1,42 25Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="25"
-                android:startY="25"
-                android:endX="83"
-                android:endY="83">
-                <item android:offset="0" android:color="#D90B0E1D" />
-                <item android:offset="0.5" android:color="#EB11162B" />
-                <item android:offset="1" android:color="#E0070913" />
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- Soft interior rainbow corner shimmer inside the squircle -->
-    <path android:pathData="M42,25H66A17,17 0,0 1,83 42V66A17,17 0,0 1,66 83H42A17,17 0,0 1,25 66V42A17,17 0,0 1,42 25Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="radial"
-                android:centerX="54"
-                android:centerY="48"
-                android:gradientRadius="32"
-                android:startColor="#2400E5FF"
-                android:endColor="#0000E5FF" />
-        </aapt:attr>
-    </path>
-
-    <!-- Neon rainbow squircle border: outer soft halo -->
-    <path
-        android:pathData="M42,25H66A17,17 0,0 1,83 42V66A17,17 0,0 1,66 83H42A17,17 0,0 1,25 66V42A17,17 0,0 1,42 25Z"
-        android:strokeWidth="4.4"
-        android:strokeLineJoin="round">
+    <!-- Layer 1: Wide outer atmospheric diffusion -->
+    <path android:pathData="M33,41L47.5,54L33,67" android:strokeWidth="14.2" android:strokeLineCap="round" android:strokeLineJoin="round">
         <aapt:attr name="android:strokeColor">
-            <gradient
-                android:type="linear"
-                android:startX="25"
-                android:startY="25"
-                android:endX="83"
-                android:endY="83">
-                <item android:offset="0" android:color="#38FF0080" />
-                <item android:offset="0.18" android:color="#38FF6B00" />
-                <item android:offset="0.35" android:color="#38FFE600" />
-                <item android:offset="0.52" android:color="#3800FF88" />
-                <item android:offset="0.70" android:color="#3800E5FF" />
-                <item android:offset="0.86" android:color="#389D4EDD" />
-                <item android:offset="1" android:color="#38FF00C8" />
+            <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                <item android:offset="0" android:color="#0DFF2A85" />
+                <item android:offset="0.22" android:color="#0DFF7A00" />
+                <item android:offset="0.42" android:color="#0DFFE600" />
+                <item android:offset="0.62" android:color="#0D00F5A0" />
+                <item android:offset="0.82" android:color="#0D00D9FF" />
+                <item android:offset="1" android:color="#0D9B5CFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M54,67L75,67" android:strokeWidth="14.2" android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                <item android:offset="0" android:color="#0DFF2A85" />
+                <item android:offset="0.22" android:color="#0DFF7A00" />
+                <item android:offset="0.42" android:color="#0DFFE600" />
+                <item android:offset="0.62" android:color="#0D00F5A0" />
+                <item android:offset="0.82" android:color="#0D00D9FF" />
+                <item android:offset="1" android:color="#0D9B5CFF" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- Neon rainbow squircle border: medium bloom -->
-    <path
-        android:pathData="M42,25H66A17,17 0,0 1,83 42V66A17,17 0,0 1,66 83H42A17,17 0,0 1,25 66V42A17,17 0,0 1,42 25Z"
-        android:strokeWidth="2.8"
-        android:strokeLineJoin="round">
+    <!-- Layer 2: Soft outer halo -->
+    <path android:pathData="M33,41L47.5,54L33,67" android:strokeWidth="11.6" android:strokeLineCap="round" android:strokeLineJoin="round">
         <aapt:attr name="android:strokeColor">
-            <gradient
-                android:type="linear"
-                android:startX="25"
-                android:startY="25"
-                android:endX="83"
-                android:endY="83">
-                <item android:offset="0" android:color="#7DFF0080" />
-                <item android:offset="0.18" android:color="#7DFF6B00" />
-                <item android:offset="0.35" android:color="#7DFFE600" />
-                <item android:offset="0.52" android:color="#7D00FF88" />
-                <item android:offset="0.70" android:color="#7D00E5FF" />
-                <item android:offset="0.86" android:color="#7D9D4EDD" />
-                <item android:offset="1" android:color="#7DFF00C8" />
+            <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                <item android:offset="0" android:color="#16FF2A85" />
+                <item android:offset="0.22" android:color="#16FF7A00" />
+                <item android:offset="0.42" android:color="#16FFE600" />
+                <item android:offset="0.62" android:color="#1600F5A0" />
+                <item android:offset="0.82" android:color="#1600D9FF" />
+                <item android:offset="1" android:color="#169B5CFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M54,67L75,67" android:strokeWidth="11.6" android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                <item android:offset="0" android:color="#16FF2A85" />
+                <item android:offset="0.22" android:color="#16FF7A00" />
+                <item android:offset="0.42" android:color="#16FFE600" />
+                <item android:offset="0.62" android:color="#1600F5A0" />
+                <item android:offset="0.82" android:color="#1600D9FF" />
+                <item android:offset="1" android:color="#169B5CFF" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- Neon rainbow squircle border: vivid primary tube -->
-    <path
-        android:pathData="M42,25H66A17,17 0,0 1,83 42V66A17,17 0,0 1,66 83H42A17,17 0,0 1,25 66V42A17,17 0,0 1,42 25Z"
-        android:strokeWidth="1.65"
-        android:strokeLineJoin="round">
+    <!-- Layer 3: Mid bloom -->
+    <path android:pathData="M33,41L47.5,54L33,67" android:strokeWidth="9.2" android:strokeLineCap="round" android:strokeLineJoin="round">
         <aapt:attr name="android:strokeColor">
-            <gradient
-                android:type="linear"
-                android:startX="25"
-                android:startY="25"
-                android:endX="83"
-                android:endY="83">
-                <item android:offset="0" android:color="#FFFF0080" />
-                <item android:offset="0.18" android:color="#FFFF6B00" />
-                <item android:offset="0.35" android:color="#FFFFE600" />
-                <item android:offset="0.52" android:color="#FF00FF88" />
-                <item android:offset="0.70" android:color="#FF00E5FF" />
-                <item android:offset="0.86" android:color="#FF9D4EDD" />
-                <item android:offset="1" android:color="#FFFF00C8" />
+            <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                <item android:offset="0" android:color="#24FF2A85" />
+                <item android:offset="0.22" android:color="#24FF7A00" />
+                <item android:offset="0.42" android:color="#24FFE600" />
+                <item android:offset="0.62" android:color="#2400F5A0" />
+                <item android:offset="0.82" android:color="#2400D9FF" />
+                <item android:offset="1" android:color="#249B5CFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M54,67L75,67" android:strokeWidth="9.2" android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                <item android:offset="0" android:color="#24FF2A85" />
+                <item android:offset="0.22" android:color="#24FF7A00" />
+                <item android:offset="0.42" android:color="#24FFE600" />
+                <item android:offset="0.62" android:color="#2400F5A0" />
+                <item android:offset="0.82" android:color="#2400D9FF" />
+                <item android:offset="1" android:color="#249B5CFF" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- Neon rainbow squircle border: hot white inner filament -->
-    <path
-        android:pathData="M42,25H66A17,17 0,0 1,83 42V66A17,17 0,0 1,66 83H42A17,17 0,0 1,25 66V42A17,17 0,0 1,42 25Z"
-        android:strokeColor="#8CFFFFFF"
-        android:strokeWidth="0.5"
-        android:strokeLineJoin="round" />
+    <!-- Layer 4: Inner neon bloom -->
+    <path android:pathData="M33,41L47.5,54L33,67" android:strokeWidth="7.0" android:strokeLineCap="round" android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                <item android:offset="0" android:color="#48FF2A85" />
+                <item android:offset="0.22" android:color="#48FF7A00" />
+                <item android:offset="0.42" android:color="#48FFE600" />
+                <item android:offset="0.62" android:color="#4800F5A0" />
+                <item android:offset="0.82" android:color="#4800D9FF" />
+                <item android:offset="1" android:color="#489B5CFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M54,67L75,67" android:strokeWidth="7.0" android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                <item android:offset="0" android:color="#48FF2A85" />
+                <item android:offset="0.22" android:color="#48FF7A00" />
+                <item android:offset="0.42" android:color="#48FFE600" />
+                <item android:offset="0.62" android:color="#4800F5A0" />
+                <item android:offset="0.82" android:color="#4800D9FF" />
+                <item android:offset="1" android:color="#489B5CFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
 
-    <!-- Chevron '>' outer & medium rainbow neon aura + bright white tube core -->
-    <path
-        android:pathData="M39.5,44.5L50.5,54L39.5,63.5"
-        android:strokeWidth="7.4"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round">
+    <!-- Layer 5: Crisp primary neon tube -->
+    <path android:pathData="M33,41L47.5,54L33,67" android:strokeWidth="4.8" android:strokeLineCap="round" android:strokeLineJoin="round">
         <aapt:attr name="android:strokeColor">
-            <gradient
-                android:type="linear"
-                android:startX="39"
-                android:startY="44"
-                android:endX="51"
-                android:endY="64">
-                <item android:offset="0" android:color="#40FF0099" />
-                <item android:offset="0.35" android:color="#4000E5FF" />
-                <item android:offset="0.7" android:color="#4000FF88" />
-                <item android:offset="1" android:color="#40FFE600" />
+            <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                <item android:offset="0" android:color="#FFFF2A85" />
+                <item android:offset="0.22" android:color="#FFFF7A00" />
+                <item android:offset="0.42" android:color="#FFFFE600" />
+                <item android:offset="0.62" android:color="#FF00F5A0" />
+                <item android:offset="0.82" android:color="#FF00D9FF" />
+                <item android:offset="1" android:color="#FF9B5CFF" />
             </gradient>
         </aapt:attr>
     </path>
-    <path
-        android:pathData="M39.5,44.5L50.5,54L39.5,63.5"
-        android:strokeWidth="5.2"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round">
+    <path android:pathData="M54,67L75,67" android:strokeWidth="4.8" android:strokeLineCap="round">
         <aapt:attr name="android:strokeColor">
-            <gradient
-                android:type="linear"
-                android:startX="39"
-                android:startY="44"
-                android:endX="51"
-                android:endY="64">
-                <item android:offset="0" android:color="#99FF0099" />
-                <item android:offset="0.35" android:color="#9900E5FF" />
-                <item android:offset="0.7" android:color="#9900FF88" />
-                <item android:offset="1" android:color="#99FFE600" />
+            <gradient android:type="linear" android:startX="31" android:startY="44" android:endX="77" android:endY="66">
+                <item android:offset="0" android:color="#FFFF2A85" />
+                <item android:offset="0.22" android:color="#FFFF7A00" />
+                <item android:offset="0.42" android:color="#FFFFE600" />
+                <item android:offset="0.62" android:color="#FF00F5A0" />
+                <item android:offset="0.82" android:color="#FF00D9FF" />
+                <item android:offset="1" android:color="#FF9B5CFF" />
             </gradient>
         </aapt:attr>
     </path>
+
+    <!-- Layer 6: Hot glass specular filament -->
     <path
-        android:pathData="M39.5,44.5L50.5,54L39.5,63.5"
-        android:strokeColor="#FFF8FAFC"
-        android:strokeWidth="3.8"
+        android:pathData="M33,41L47.5,54L33,67"
+        android:strokeColor="#CCFFFFFF"
+        android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
-
-    <!-- Prompt cursor bar '_' multi-layer rainbow neon bloom + core -->
     <path
-        android:pathData="M53.5,63.5L68.5,63.5"
-        android:strokeWidth="7.4"
-        android:strokeLineCap="round">
-        <aapt:attr name="android:strokeColor">
-            <gradient
-                android:type="linear"
-                android:startX="53"
-                android:startY="63.5"
-                android:endX="69"
-                android:endY="63.5">
-                <item android:offset="0" android:color="#42FFE600" />
-                <item android:offset="0.35" android:color="#4200FF88" />
-                <item android:offset="0.7" android:color="#4200E5FF" />
-                <item android:offset="1" android:color="#42FF00C8" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path
-        android:pathData="M53.5,63.5L68.5,63.5"
-        android:strokeWidth="5.2"
-        android:strokeLineCap="round">
-        <aapt:attr name="android:strokeColor">
-            <gradient
-                android:type="linear"
-                android:startX="53"
-                android:startY="63.5"
-                android:endX="69"
-                android:endY="63.5">
-                <item android:offset="0" android:color="#99FFE600" />
-                <item android:offset="0.35" android:color="#9900FF88" />
-                <item android:offset="0.7" android:color="#9900E5FF" />
-                <item android:offset="1" android:color="#99FF00C8" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path
-        android:pathData="M53.5,63.5L68.5,63.5"
-        android:strokeWidth="4.0"
-        android:strokeLineCap="round">
-        <aapt:attr name="android:strokeColor">
-            <gradient
-                android:type="linear"
-                android:startX="53"
-                android:startY="63.5"
-                android:endX="69"
-                android:endY="63.5">
-                <item android:offset="0" android:color="#FFFFE600" />
-                <item android:offset="0.35" android:color="#FF00FF88" />
-                <item android:offset="0.7" android:color="#FF00E5FF" />
-                <item android:offset="1" android:color="#FFFF00C8" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path
-        android:pathData="M53.5,63.5L68.5,63.5"
-        android:strokeColor="#B8FFFFFF"
-        android:strokeWidth="1.25"
+        android:pathData="M54,67L75,67"
+        android:strokeColor="#CCFFFFFF"
+        android:strokeWidth="1.2"
         android:strokeLineCap="round" />
-
-    <!-- Spark node orb: radial neon aura + vivid rainbow orb + bright core star -->
-    <path android:pathData="M57,44A9,9 0,1 0,75 44A9,9 0,1 0,57 44Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="radial"
-                android:centerX="66"
-                android:centerY="44"
-                android:gradientRadius="9">
-                <item android:offset="0" android:color="#A600E5FF" />
-                <item android:offset="0.48" android:color="#52FF00C8" />
-                <item android:offset="1" android:color="#00FF00C8" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path android:pathData="M62.8,44A3.2,3.2 0,1 0,69.2 44A3.2,3.2 0,1 0,62.8 44Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="62.8"
-                android:startY="40.8"
-                android:endX="69.2"
-                android:endY="47.2">
-                <item android:offset="0" android:color="#FFFF0099" />
-                <item android:offset="0.4" android:color="#FFFFE600" />
-                <item android:offset="0.75" android:color="#FF00FF88" />
-                <item android:offset="1" android:color="#FF00E5FF" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path
-        android:fillColor="#EBFFFFFF"
-        android:pathData="M64.65,44A1.35,1.35 0,1 0,67.35 44A1.35,1.35 0,1 0,64.65 44Z" />
 </vector>

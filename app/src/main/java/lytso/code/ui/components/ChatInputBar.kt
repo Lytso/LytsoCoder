@@ -628,10 +628,14 @@ fun ChatInputBar(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
                 color = lytso.code.theme.AppColors.card,
-                border = BorderStroke(
-                    1.dp,
-                    if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-                )
+                border = if (lytso.code.theme.ThemeManager.isRainbowAmoled) {
+                    lytso.code.theme.RainbowAccent.borderStroke(1.25.dp, 0.78f)
+                } else {
+                    BorderStroke(
+                        1.dp,
+                        if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                    )
+                }
             ) {
                 if (isRecordingAudio) {
                     val infiniteTransition = rememberInfiniteTransition(label = "recPulse")
@@ -1313,6 +1317,7 @@ fun ChatInputBar(
                             // can't send yet (signed out, offline, attachments loading): the same faint circle as the inactive
                             // Send, so the arrow (textSecondary) stays visible; it used to be textSecondary on textSecondary
                             val sendBlocked = !isAuth || !isOnline || attachmentsBusy
+                            val isRainbowSend = lytso.code.theme.ThemeManager.isRainbowAmoled && !sendBlocked && !isBackgroundActive
                             val sendBtnColor = if (sendBlocked) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f) else if (isBackgroundActive) lytso.code.theme.AppColors.warning else ClaudeTerracotta
                             Surface(
                                 onClick = {
@@ -1336,14 +1341,17 @@ fun ChatInputBar(
                                         textFieldState.clearText()
                                 },
                                 shape = CircleShape,
-                                color = sendBtnColor,
+                                color = if (isRainbowSend) Color.Transparent else sendBtnColor,
                                 modifier = Modifier.size(36.dp)
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
+                                Box(
+                                    modifier = if (isRainbowSend) Modifier.fillMaxSize().background(lytso.code.theme.RainbowAccent.diagonalBrush()) else Modifier,
+                                    contentAlignment = Alignment.Center
+                                ) {
                                     Icon(
                                         imageVector = Icons.Default.ArrowUpward,
                                         contentDescription = "Send",
-                                        tint = if (sendBlocked) lytso.code.theme.AppColors.textSecondary else if (isBackgroundActive) lytso.code.theme.AppColors.onBackground else Color.White,
+                                        tint = if (sendBlocked) lytso.code.theme.AppColors.textSecondary else if (isRainbowSend) Color(0xFF05060B) else if (isBackgroundActive) lytso.code.theme.AppColors.onBackground else Color.White,
                                         modifier = Modifier.size(19.dp)
                                     )
                                 }

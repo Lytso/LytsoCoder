@@ -77,6 +77,9 @@ object ThemeManager {
 
     val current: AppTheme get() = themeFor(isDark)
 
+    /** True when the special Rainbow AMOLED theme is active on screen (enables prismatic neon accents). */
+    val isRainbowAmoled: Boolean get() = isDark && current.id == BuiltInThemes.RAINBOW_AMOLED
+
     @Volatile private var cachedColors: ThemeColors? = null
     @Volatile private var cachedId: String? = null
     @Volatile private var cachedDark = false

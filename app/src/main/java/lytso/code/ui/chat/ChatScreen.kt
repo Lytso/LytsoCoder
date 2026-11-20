@@ -1634,6 +1634,7 @@ fun ChatScreen(
                     label = "top_bar_line"
                 )
                 val topBarLineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                Column {
                 TopAppBar(
                     // shorter than Material's 64dp: one line of title and the small project pill need less
                     expandedHeight = 52.dp,
@@ -1969,6 +1970,15 @@ fun ChatScreen(
                         containerColor = MaterialTheme.colorScheme.background
                     )
                 )
+                if (lytso.code.theme.ThemeManager.isRainbowAmoled) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.5.dp)
+                            .background(lytso.code.theme.RainbowAccent.horizontalBrush(0.78f))
+                    )
+                }
+                }
             },
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets.statusBars

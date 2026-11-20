@@ -1,111 +1,77 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="512" height="512" role="img" aria-label="LytsoCoder neon rainbow emblem">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 72 72" width="512" height="512" role="img" aria-label="LytsoCoder minimalist neon rainbow terminal logo">
   <defs>
-    <!-- Deep obsidian squircle fill -->
-    <linearGradient id="lcBg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#090B16"/>
-      <stop offset="50%" stop-color="#11162B"/>
-      <stop offset="100%" stop-color="#060811"/>
-    </linearGradient>
+    <!-- Exact squircle crop matching Android adaptive icon visible zone [18..90] -->
+    <clipPath id="squircleClip">
+      <rect x="18" y="18" width="72" height="72" rx="16"/>
+    </clipPath>
 
-    <!-- Full-spectrum neon rainbow frame gradient -->
-    <linearGradient id="lcRainbowFrame" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FF0080"/>
-      <stop offset="18%" stop-color="#FF6B00"/>
-      <stop offset="35%" stop-color="#FFE600"/>
-      <stop offset="52%" stop-color="#00FF88"/>
-      <stop offset="70%" stop-color="#00E5FF"/>
-      <stop offset="86%" stop-color="#9D4EDD"/>
-      <stop offset="100%" stop-color="#FF00C8"/>
-    </linearGradient>
-
-    <!-- Vivid neon rainbow gradient for chevron halo -->
-    <linearGradient id="lcChevronNeon" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FF0099"/>
-      <stop offset="35%" stop-color="#00E5FF"/>
-      <stop offset="70%" stop-color="#00FF88"/>
-      <stop offset="100%" stop-color="#FFE600"/>
-    </linearGradient>
-
-    <!-- Neon rainbow bar gradient -->
-    <linearGradient id="lcBarNeon" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#FFE600"/>
-      <stop offset="33%" stop-color="#00FF88"/>
-      <stop offset="68%" stop-color="#00E5FF"/>
-      <stop offset="100%" stop-color="#FF00C8"/>
-    </linearGradient>
-
-    <!-- Neon rainbow spark gradient -->
-    <linearGradient id="lcOrbNeon" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FF0099"/>
-      <stop offset="45%" stop-color="#FFE600"/>
-      <stop offset="75%" stop-color="#00FF88"/>
-      <stop offset="100%" stop-color="#00E5FF"/>
-    </linearGradient>
-
-    <!-- Ambient multi-color neon reflections inside the dark squircle -->
-    <radialGradient id="lcGlowTopLeft" cx="18%" cy="18%" r="48%">
-      <stop offset="0%" stop-color="#FF0088" stop-opacity="0.28"/>
-      <stop offset="100%" stop-color="#FF0088" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="lcGlowTopRight" cx="84%" cy="22%" r="48%">
-      <stop offset="0%" stop-color="#00E5FF" stop-opacity="0.30"/>
-      <stop offset="100%" stop-color="#00E5FF" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="lcGlowBottomLeft" cx="22%" cy="84%" r="46%">
-      <stop offset="0%" stop-color="#9D4EDD" stop-opacity="0.24"/>
-      <stop offset="100%" stop-color="#9D4EDD" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="lcGlowBottomRight" cx="80%" cy="82%" r="46%">
-      <stop offset="0%" stop-color="#00FF88" stop-opacity="0.24"/>
-      <stop offset="100%" stop-color="#00FF88" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="lcOrbHalo" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#00E5FF" stop-opacity="0.65"/>
-      <stop offset="45%" stop-color="#FF00C8" stop-opacity="0.35"/>
-      <stop offset="100%" stop-color="#FF00C8" stop-opacity="0"/>
+    <!-- AMOLED center depth -->
+    <radialGradient id="bgDepth" cx="54" cy="54" r="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F111E"/>
+      <stop offset="100%" stop-color="#050508"/>
     </radialGradient>
 
-    <!-- Neon bloom filters -->
-    <filter id="neonBloomWide" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="4.5" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-      </feMerge>
+    <!-- Subtle atmospheric neon auras behind >_ -->
+    <radialGradient id="auraMagenta" cx="40" cy="54" r="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF2A85" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#FF2A85" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="auraCyan" cx="66" cy="62" r="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00D9FF" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#00D9FF" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Continuous Neon Rainbow gradient across >_ -->
+    <linearGradient id="lcRainbow" x1="31" y1="44" x2="77" y2="66" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF2A85"/>
+      <stop offset="22%" stop-color="#FF7A00"/>
+      <stop offset="42%" stop-color="#FFE600"/>
+      <stop offset="62%" stop-color="#00F5A0"/>
+      <stop offset="82%" stop-color="#00D9FF"/>
+      <stop offset="100%" stop-color="#9B5CFF"/>
+    </linearGradient>
+
+    <!-- Smooth neon bloom filters -->
+    <filter id="neonWide" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3.4"/>
     </filter>
-    <filter id="neonBloomTight" x="-25%" y="-25%" width="150%" height="150%">
-      <feGaussianBlur stdDeviation="2.0" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+    <filter id="neonTight" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="1.4"/>
     </filter>
   </defs>
 
-  <!-- Base obsidian squircle + corner neon ambient aura -->
-  <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#lcBg)"/>
-  <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#lcGlowTopLeft)"/>
-  <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#lcGlowTopRight)"/>
-  <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#lcGlowBottomLeft)"/>
-  <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#lcGlowBottomRight)"/>
+  <g clip-path="url(#squircleClip)">
+    <!-- Pure AMOLED deep obsidian base + radial vignette -->
+    <rect x="18" y="18" width="72" height="72" fill="#050508"/>
+    <rect x="18" y="18" width="72" height="72" fill="url(#bgDepth)"/>
+    <rect x="18" y="18" width="72" height="72" fill="url(#auraMagenta)"/>
+    <rect x="18" y="18" width="72" height="72" fill="url(#auraCyan)"/>
 
-  <!-- Neon rainbow outer bloom + medium glow + hot filament core on squircle border -->
-  <rect x="8.5" y="8.5" width="111" height="111" rx="25.5" fill="none" stroke="url(#lcRainbowFrame)" stroke-width="7.5" opacity="0.48" filter="url(#neonBloomWide)"/>
-  <rect x="8.5" y="8.5" width="111" height="111" rx="25.5" fill="none" stroke="url(#lcRainbowFrame)" stroke-width="4.2" opacity="0.92" filter="url(#neonBloomTight)"/>
-  <rect x="8.5" y="8.5" width="111" height="111" rx="25.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.58" stroke-width="1.2"/>
+    <!-- Layer 1: Wide atmospheric neon glow -->
+    <g fill="none" stroke="url(#lcRainbow)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" opacity="0.28" filter="url(#neonWide)">
+      <path d="M33 41 L47.5 54 L33 67"/>
+      <path d="M54 67 L75 67"/>
+    </g>
 
-  <!-- Left chevron > with neon rainbow aura and bright white tube core -->
-  <path d="M35 45 L57 64 L35 83" fill="none" stroke="url(#lcChevronNeon)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" opacity="0.52" filter="url(#neonBloomWide)"/>
-  <path d="M35 45 L57 64 L35 83" fill="none" stroke="url(#lcChevronNeon)" stroke-width="10.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.92" filter="url(#neonBloomTight)"/>
-  <path d="M35 45 L57 64 L35 83" fill="none" stroke="#F8FAFC" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Layer 2: Tight neon bloom -->
+    <g fill="none" stroke="url(#lcRainbow)" stroke-width="7.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.52" filter="url(#neonTight)">
+      <path d="M33 41 L47.5 54 L33 67"/>
+      <path d="M54 67 L75 67"/>
+    </g>
 
-  <!-- Prompt cursor bar _ with multi-layer neon rainbow glow -->
-  <line x1="63" y1="83" x2="93" y2="83" stroke="url(#lcBarNeon)" stroke-width="14" stroke-linecap="round" opacity="0.55" filter="url(#neonBloomWide)"/>
-  <line x1="63" y1="83" x2="93" y2="83" stroke="url(#lcBarNeon)" stroke-width="9" stroke-linecap="round" filter="url(#neonBloomTight)"/>
-  <line x1="63" y1="83" x2="93" y2="83" stroke="#FFFFFF" stroke-opacity="0.72" stroke-width="2.6" stroke-linecap="round"/>
+    <!-- Layer 3: Crisp primary neon tube -->
+    <g fill="none" stroke="url(#lcRainbow)" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M33 41 L47.5 54 L33 67"/>
+      <path d="M54 67 L75 67"/>
+    </g>
 
-  <!-- Spark node / agent indicator orb with neon rainbow aura -->
-  <circle cx="88" cy="44" r="15" fill="url(#lcOrbHalo)"/>
-  <circle cx="88" cy="44" r="7.5" fill="url(#lcOrbNeon)" opacity="0.7" filter="url(#neonBloomTight)"/>
-  <circle cx="88" cy="44" r="6" fill="url(#lcOrbNeon)"/>
-  <circle cx="88" cy="44" r="2.4" fill="#FFFFFF" fill-opacity="0.9"/>
+    <!-- Layer 4: Hot white glass specular filament -->
+    <g fill="none" stroke="#FFFFFF" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.72">
+      <path d="M33 41 L47.5 54 L33 67"/>
+      <path d="M54 67 L75 67"/>
+    </g>
+  </g>
+
+  <!-- Ultra-subtle hairline perimeter so dark GitHub themes separate cleanly without framing clutter -->
+  <rect x="18.4" y="18.4" width="71.2" height="71.2" rx="15.6" fill="none" stroke="url(#lcRainbow)" stroke-width="0.65" opacity="0.28"/>
 </svg>

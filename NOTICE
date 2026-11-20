@@ -72,9 +72,10 @@ Summary of notable modifications in 2026:
     isolation, Enhanced Conversation & Context Control, Android 11+
     seccomp-safe process control (`pkg/procutil`), and zero-telemetry guarantees.
   - 2026-11-20: Replaced the launcher icon, in-app `AppIconImage`, Android 12+
-    splash animation, and README emblem with the Neon Rainbow LytsoCoder
-    artwork (`docs/readme/lytsocoder-icon.svg`, `ic_launcher_background.xml`,
-    `ic_launcher_foreground.xml`, `splash_prism_animated.xml`).
+    splash animation, and README emblem with the minimalist Neon Rainbow
+    terminal (`>_`) artwork unified between `docs/readme/lytsocoder-icon.svg`
+    and Android adaptive drawables, and added the built-in `Rainbow AMOLED`
+    dark theme (`app/src/main/java/lytso/code/theme/RainbowAccent.kt`).
 
 ------------------------------------------------------------------
 3. CORRESPONDING SOURCE AVAILABILITY (GNU GPLv3 Section 6)
