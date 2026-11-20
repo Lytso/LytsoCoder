@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"gemini-server/pkg/buildinfo"
+	"gemini-server/pkg/procutil"
 	"io"
 	"net"
 	"net/http"
@@ -209,7 +210,7 @@ func (h *Handler) GitCloneHandler(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "clone", "--progress", repo, target)
+	cmd := procutil.CommandContext(ctx, "git", "clone", "--progress", repo, target)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0") // public repos only: fail instead of asking for a password
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {

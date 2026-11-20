@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"os/exec"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"gemini-server/pkg/procutil"
 	"github.com/gorilla/websocket"
 )
 
@@ -426,7 +426,7 @@ func (m *Manager) runCLI(timeout time.Duration, args ...string) ([]byte, error) 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := procutil.CommandContext(ctx, bin, args...)
 	cmd.Dir = m.HomeDir
 	return cmd.Output()
 }

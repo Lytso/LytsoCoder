@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gemini-server/pkg/procutil"
 )
 
 const (
@@ -634,10 +636,15 @@ func (s *Session) Kill() {
 		_ = stdin.Close()
 	}
 	if cmd != nil && cmd.Process != nil {
-		_ = cmd.Process.Signal(os.Interrupt)
+		_ = procutil.Interrupt(cmd)
 		go func() {
 			time.Sleep(3 * time.Second)
-			_ = cmd.Process.Kill()
+			s.mu.Lock()
+			same := s.cmd == cmd
+			s.mu.Unlock()
+			if same {
+				_ = procutil.Kill(cmd)
+			}
 		}()
 	}
 }

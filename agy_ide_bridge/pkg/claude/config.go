@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gemini-server/pkg/procutil"
 )
 
 // --- settings.json --------------------------------------------------------------------------------
@@ -64,7 +66,7 @@ func (m *Manager) handleSandbox(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, bwrap, "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--unshare-net", "true").CombinedOutput()
+	out, err := procutil.CommandContext(ctx, bwrap, "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--unshare-net", "true").CombinedOutput()
 	if err != nil {
 		reason := strings.TrimSpace(string(out))
 		if reason == "" {
@@ -364,7 +366,7 @@ func (m *Manager) runCLIIn(cwd string, timeout time.Duration, args ...string) ([
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := procutil.CommandContext(ctx, bin, args...)
 	cmd.Dir = cwd
 	cmd.Env = os.Environ()
 	cmd.Stdin = nil

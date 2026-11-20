@@ -2,7 +2,6 @@ package hub
 
 import (
 	"bufio"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +20,7 @@ import (
 	"time"
 
 	"gemini-server/pkg/config"
+	"gemini-server/pkg/procutil"
 	"gemini-server/pkg/security"
 )
 
@@ -53,12 +53,12 @@ type HubManager struct {
 
 	cmd         *exec.Cmd
 	stdinPipe   io.WriteCloser
-	cancel      context.CancelFunc
 	status      string
 	csrfToken   string
 	lastError   string
 	isRunning   bool
 	isExternal  bool
+	paused      bool
 	processDone chan struct{}
 	monitorStop chan struct{}
 	recentLogs  []string
@@ -312,6 +312,13 @@ func (m *HubManager) GetStatusInfo() (string, string, string, []string) {
 	return m.status, m.csrfToken, m.lastError, logsCopy
 }
 
+// GetCsrfToken returns the hub's current CSRF token in a thread-safe manner.
+func (m *HubManager) GetCsrfToken() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.csrfToken
+}
+
 // SetStopped reports the hub as stopped (used when Antigravity is turned off).
 func (m *HubManager) SetStopped() {
 	m.mu.Lock()
@@ -360,8 +367,18 @@ func (m *HubManager) StartContinuousMonitor() {
 			case <-m.monitorStop:
 				return
 			case <-time.After(interval):
+				m.mu.Lock()
+				paused := m.paused
+				m.mu.Unlock()
+				if paused {
+					continue
+				}
 				active := m.isHubReady()
 				m.mu.Lock()
+				if m.paused {
+					m.mu.Unlock()
+					continue
+				}
 				currentStatus := m.status
 				if active {
 					tokenAcquired := false
@@ -443,7 +460,9 @@ func (m *HubManager) Start() error {
 		return nil
 	}
 
-	m.setStatusLocked(HubStatusStarting, "")
+	if !m.paused {
+		m.setStatusLocked(HubStatusStarting, "")
+	}
 
 	if m.AgyBinPath == "" {
 		err := fmt.Errorf("AGY executable binary not specified or found")
@@ -507,11 +526,8 @@ func (m *HubManager) Start() error {
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	m.cancel = cancel
-
 	shArgs := append([]string{"-c", `exec "$0" "$@"`, m.AgyBinPath}, args...)
-	cmd := exec.CommandContext(ctx, "sh", shArgs...)
+	cmd := exec.Command("sh", shArgs...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	// Set required environment variables for agy hub mode dynamically across all platforms
@@ -539,7 +555,6 @@ func (m *HubManager) Start() error {
 	stderrPipe, errErr := cmd.StderrPipe()
 
 	if err := cmd.Start(); err != nil {
-		cancel()
 		m.setStatusLocked(HubStatusError, err.Error())
 		m.mu.Unlock()
 		return fmt.Errorf("failed to start agy hub via sh: %w", err)
@@ -588,10 +603,14 @@ func (m *HubManager) Start() error {
 			m.lastExitAt = time.Now()
 			if err != nil {
 				m.lastExitErr = err.Error()
-				m.setStatusLocked(HubStatusError, err.Error())
+				if !m.paused {
+					m.setStatusLocked(HubStatusError, err.Error())
+				}
 			} else {
 				m.lastExitErr = "exited normally"
-				m.setStatusLocked(HubStatusStopped, "")
+				if !m.paused {
+					m.setStatusLocked(HubStatusStopped, "")
+				}
 			}
 		}
 		m.mu.Unlock()
@@ -634,7 +653,14 @@ func (m *HubManager) Start() error {
 	}
 
 	if ready {
-		tok := m.FetchCsrfToken()
+		var tok string
+		for i := 0; i < 10; i++ {
+			tok = m.FetchCsrfToken()
+			if tok != "" {
+				break
+			}
+			time.Sleep(150 * time.Millisecond)
+		}
 		m.mu.Lock()
 		if tok != "" {
 			m.csrfToken = tok
@@ -653,7 +679,6 @@ func (m *HubManager) Start() error {
 func (m *HubManager) Stop() {
 	m.mu.Lock()
 	cmd := m.cmd
-	cancel := m.cancel
 	isRunning := m.isRunning
 	isExternal := m.isExternal
 	doneChan := m.processDone
@@ -670,21 +695,12 @@ func (m *HubManager) Stop() {
 		return
 	}
 
-	if cancel != nil {
-		cancel()
-	}
-
 	if cmd != nil && cmd.Process != nil {
 		pid := cmd.Process.Pid
 		fmt.Printf("🛑 Stopping AGY Hub process tree (PID %d)...\n", pid)
 
-		// Terminate the entire process group
-		pgid, err := syscall.Getpgid(pid)
-		if err == nil {
-			_ = syscall.Kill(-pgid, syscall.SIGTERM)
-		} else {
-			_ = cmd.Process.Signal(syscall.SIGTERM)
-		}
+		// Terminate the entire process group via syscall.Kill (avoids Android 11 pidfd_send_signal SIGSYS).
+		_ = procutil.TerminateGroup(cmd)
 
 		stopped := false
 		if doneChan != nil {
@@ -697,10 +713,13 @@ func (m *HubManager) Stop() {
 		}
 
 		if !stopped {
-			if pgid > 0 {
-				_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			_ = procutil.KillGroup(cmd)
+			if doneChan != nil {
+				select {
+				case <-doneChan:
+				case <-time.After(500 * time.Millisecond):
+				}
 			}
-			_ = cmd.Process.Kill()
 			_ = exec.Command("pkill", "-9", "-P", fmt.Sprintf("%d", pid)).Run()
 			_ = exec.Command("pkill", "-9", "-f", "agy --hub").Run()
 			fmt.Println("⚠️  AGY Hub force terminated.")
@@ -725,34 +744,31 @@ func (m *HubManager) Stop() {
 
 // WithPausedHub temporarily stops the bridge-managed `agy --hub` process (if running), runs fn so offline files or
 // conversation SQLite databases can be mutated cleanly without stale hub caches or locks, and restarts it afterwards.
-// Unlike Stop(), it keeps monitorStop alive and leaves the binary security header intact across the restart.
+// Unlike Stop(), it keeps monitorStop alive, suppresses transient stopped status broadcasts, and keeps the security
+// header intact across the restart.
 func (m *HubManager) WithPausedHub(fn func() error) (bool, error) {
 	m.opMu.Lock()
 	defer m.opMu.Unlock()
 
 	m.mu.Lock()
+	m.paused = true
 	cmd := m.cmd
-	cancel := m.cancel
 	doneChan := m.processDone
 	shouldStop := cmd != nil && cmd.Process != nil && !m.isExternal
 	if shouldStop {
 		m.isRunning = false
 		m.csrfToken = ""
 		m.cmd = nil
-		m.cancel = nil
 	}
 	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		m.paused = false
+		m.mu.Unlock()
+	}()
 
 	if shouldStop {
-		if cancel != nil {
-			cancel()
-		}
-		pid := cmd.Process.Pid
-		if pgid, err := syscall.Getpgid(pid); err == nil {
-			_ = syscall.Kill(-pgid, syscall.SIGTERM)
-		} else {
-			_ = cmd.Process.Signal(syscall.SIGTERM)
-		}
+		_ = procutil.TerminateGroup(cmd)
 
 		stopped := false
 		if doneChan != nil {
@@ -763,10 +779,7 @@ func (m *HubManager) WithPausedHub(fn func() error) (bool, error) {
 			}
 		}
 		if !stopped {
-			if pgid, err := syscall.Getpgid(pid); err == nil {
-				_ = syscall.Kill(-pgid, syscall.SIGKILL)
-			}
-			_ = cmd.Process.Kill()
+			_ = procutil.KillGroup(cmd)
 			if doneChan != nil {
 				select {
 				case <-doneChan:
@@ -774,7 +787,11 @@ func (m *HubManager) WithPausedHub(fn func() error) (bool, error) {
 				}
 			}
 		}
-		m.setStatus(HubStatusStopped, "")
+
+		portDeadline := time.Now().Add(1 * time.Second)
+		for time.Now().Before(portDeadline) && m.isHubReady() {
+			time.Sleep(50 * time.Millisecond)
+		}
 	}
 
 	fnErr := fn()

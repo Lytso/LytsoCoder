@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gemini-server/pkg/config"
+	"gemini-server/pkg/procutil"
 )
 
 var (
@@ -103,7 +104,7 @@ func (c gitCall) run(args ...string) ([]byte, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := procutil.CommandContext(ctx, bin, args...)
 	cmd.Dir = c.dir
 	env := append([]string(nil), baseEnvVal...)
 	if c.gitDir != "" {

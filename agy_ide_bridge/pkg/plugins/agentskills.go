@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -17,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gemini-server/pkg/procutil"
 )
 
 // AgentSkills serves /api/agent-skills/…: the skills each agent loads from its own user folder (Claude Code,
@@ -970,7 +971,7 @@ func (a *AgentSkills) installAgyPlugin(source string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, "plugin", "install", folder)
+	cmd := procutil.CommandContext(ctx, bin, "plugin", "install", folder)
 	cmd.Dir = a.home
 	cmd.Env = os.Environ()
 	out, err := cmd.CombinedOutput()

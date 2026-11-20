@@ -565,6 +565,7 @@ class AgyChatBackend(
     @Volatile private var totalStepsCount: Int = 0
     @Volatile private var currentAssistantMsgId: String? = null
     @Volatile private var currentTrajectoryId: String = ""
+    @Volatile private var isBrainMutating: Boolean = false
 
     /** Starts hub monitoring, conversation sync and auth checks (formerly ChatViewModel.init). */
     fun start() {
@@ -581,22 +582,26 @@ class AgyChatBackend(
                                 _isServerOnline.value = true
                                 _isBridgeOnline.value = true
                                 _conversationError.value = null
-                                syncAgyConversations(force = true)
-                                val curConv = _currentConversation.value
-                                val curId = curConv?.id
-                                if (!curId.isNullOrBlank() && curId != "new" && curConv.title != "New Chat") {
-                                    _conversationError.value = null
-                                    _isLoadingConversation.value = true
-                                    startPersistentStream(curId)
+                                if (!isBrainMutating) {
+                                    syncAgyConversations(force = true)
+                                    val curConv = _currentConversation.value
+                                    val curId = curConv?.id
+                                    if (!curId.isNullOrBlank() && curId != "new" && curConv.title != "New Chat") {
+                                        _conversationError.value = null
+                                        _isLoadingConversation.value = true
+                                        startPersistentStream(curId)
+                                    }
+                                    checkAgyAuthStatus(userInitiated = false)
+                                    refreshQuotas()
+                                    onHubOnline()
                                 }
-                                checkAgyAuthStatus(userInitiated = false)
-                                refreshQuotas()
-                                onHubOnline()
                             }
                             "starting" -> {
                                 _isBridgeOnline.value = true
                                 _conversationError.value = null
-                                _isConversationsLoading.value = true
+                                if (!isBrainMutating) {
+                                    _isConversationsLoading.value = true
+                                }
                             }
                             "error" -> {
                                 _isServerOnline.value = false
@@ -604,13 +609,15 @@ class AgyChatBackend(
                                 _conversationError.value = "Antigravity Hub failed to start: ${status.error ?: "Check server logs"}"
                             }
                             "stopped" -> {
-                                _isServerOnline.value = false
-                                _isBridgeOnline.value = true
-                                if (_conversations.value.any { it.isRunning }) {
-                                    _conversations.value = _conversations.value.map { if (it.isRunning) it.copy(isRunning = false) else it }
-                                }
-                                if (_currentConversation.value?.isRunning == true) {
-                                    _currentConversation.value = _currentConversation.value?.copy(isRunning = false)
+                                if (!isBrainMutating) {
+                                    _isServerOnline.value = false
+                                    _isBridgeOnline.value = true
+                                    if (_conversations.value.any { it.isRunning }) {
+                                        _conversations.value = _conversations.value.map { if (it.isRunning) it.copy(isRunning = false) else it }
+                                    }
+                                    if (_currentConversation.value?.isRunning == true) {
+                                        _currentConversation.value = _currentConversation.value?.copy(isRunning = false)
+                                    }
                                 }
                             }
                         }
@@ -1300,14 +1307,14 @@ class AgyChatBackend(
                     streamFailure?.let { throw it }
 
                     if (isFirstChunk) {
-                        if (activeStreamConversationId != conversationId) break
+                        if (activeStreamConversationId != conversationId || isBrainMutating) break
                         val isHubOnline = agyBridgeService.hubStatus.value.status == "online"
                         Log.w("CHAT_OPEN_DEBUG", "⚠️ [ChatViewModel Stream Loop] Stream finished without delivering frames: isFirstChunk=true, isHubOnline=$isHubOnline")
                         withContext(Dispatchers.Main) {
                             _isLoadingConversation.value = false
                             _isReconnecting.value = false
                             val isKnownExisting = _conversations.value.any { it.id == conversationId && it.title != "New Chat" }
-                            if (activeStreamConversationId == conversationId) {
+                            if (activeStreamConversationId == conversationId && !isBrainMutating) {
                                 if (isKnownExisting && _messages.value.isEmpty()) {
                                     _conversationError.value = "No messages received from Antigravity. Tap Retry."
                                     _isServerOnline.value = isHubOnline
@@ -1318,6 +1325,7 @@ class AgyChatBackend(
                         }
                         break
                     } else {
+                        if (isBrainMutating) break
                         // Normal disconnection after receiving data; clean up in-flight states and stop loop so banner stays stable
                         withContext(Dispatchers.Main) {
                             _isServerOnline.value = false
@@ -1332,7 +1340,7 @@ class AgyChatBackend(
                         break
                     }
                 } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException) {
+                    if (e is kotlinx.coroutines.CancellationException || isBrainMutating) {
                         break
                     }
                     Log.e("CHAT_OPEN_DEBUG", "❌ [ChatViewModel Stream Exception] convId=$conversationId: ${e.message}", e)
@@ -1519,13 +1527,69 @@ class AgyChatBackend(
     private suspend fun forceReloadAfterBrainMutation(convId: String) {
         withContext(Dispatchers.Main) {
             lytso.code.ui.chat.ChatFeedCache.invalidate(convId)
-            if (activeStreamConversationId == convId) {
+            if (_currentConversation.value?.id == convId) {
                 persistentStreamJob?.cancel()
                 persistentStreamJob = null
                 activeStreamConversationId = null
                 trajectoryEngine.reset(convId, force = true)
-                selectConversation(convId)
+                _isServerOnline.value = true
+                _isReconnecting.value = false
+                _conversationError.value = null
+                startPersistentStream(convId)
             }
+        }
+        syncAgyConversations(force = true)
+    }
+
+    /**
+     * Runs a bridge brain mutation (which may briefly pause and restart `agy --hub`) while suppressing
+     * transient disconnect banners, refreshing the active CSRF token cleanly, and reloading the live stream.
+     */
+    private suspend fun <T> runBrainMutationAndReload(
+        convId: String,
+        extractMeta: (T) -> Pair<Boolean, String?>,
+        onSuccessLocal: () -> Unit = {},
+        mutate: suspend () -> Result<T>
+    ): Result<T> {
+        isBrainMutating = true
+        withContext(Dispatchers.Main) {
+            if (activeStreamConversationId == convId) {
+                persistentStreamJob?.cancel()
+                persistentStreamJob = null
+                activeStreamConversationId = null
+            }
+        }
+        return try {
+            val res = mutate()
+            if (res.isSuccess) {
+                val value = res.getOrThrow()
+                val (restarted, returnedCsrf) = extractMeta(value)
+                onSuccessLocal()
+                val hubUrl = AuthPreferences.currentHubUrl
+                if (!returnedCsrf.isNullOrBlank()) {
+                    lytso.code.data.remote.core.AgyCsrfManager.instance.setCachedToken(hubUrl, returnedCsrf)
+                } else if (restarted) {
+                    agyBridgeService.fetchServerStatus(AuthPreferences.currentBridgeHttpUrl)
+                    lytso.code.data.remote.core.AgyCsrfManager.instance.awaitToken(5_000L)
+                }
+                isBrainMutating = false
+                forceReloadAfterBrainMutation(convId)
+            } else {
+                isBrainMutating = false
+                val st = agyBridgeService.fetchServerStatus(AuthPreferences.currentBridgeHttpUrl)
+                withContext(Dispatchers.Main) {
+                    if (st?.status == "online") {
+                        _isServerOnline.value = true
+                        _conversationError.value = null
+                    }
+                    if (_currentConversation.value?.id == convId && persistentStreamJob?.isActive != true) {
+                        startPersistentStream(convId)
+                    }
+                }
+            }
+            res
+        } finally {
+            isBrainMutating = false
         }
     }
 
@@ -1546,15 +1610,19 @@ class AgyChatBackend(
             ?: return onDone(false, "No editable step index for this message")
         val role = if (message.role == MessageRole.USER) "user" else "assistant"
         backendScope.launch(Dispatchers.IO) {
-            val res = lytso.code.data.remote.BrainControlClient.editAgyStep(
+            val res = runBrainMutationAndReload(
                 convId = conv.id,
-                stepIndex = stepIdx,
-                role = role,
-                text = newText,
-                preserveHidden = message.role == MessageRole.USER
-            )
+                extractMeta = { it.restarted to it.csrfToken }
+            ) {
+                lytso.code.data.remote.BrainControlClient.editAgyStep(
+                    convId = conv.id,
+                    stepIndex = stepIdx,
+                    role = role,
+                    text = newText,
+                    preserveHidden = message.role == MessageRole.USER
+                )
+            }
             if (res.isSuccess) {
-                forceReloadAfterBrainMutation(conv.id)
                 withContext(Dispatchers.Main) {
                     lytso.code.ui.components.AppToastHelper.showToast(
                         "Message updated in context",
@@ -1593,9 +1661,13 @@ class AgyChatBackend(
             return
         }
         backendScope.launch(Dispatchers.IO) {
-            val res = lytso.code.data.remote.BrainControlClient.deleteAgyThinking(conv.id, listOf(stepIndex))
+            val res = runBrainMutationAndReload(
+                convId = conv.id,
+                extractMeta = { it.restarted to it.csrfToken }
+            ) {
+                lytso.code.data.remote.BrainControlClient.deleteAgyThinking(conv.id, listOf(stepIndex))
+            }
             if (res.isSuccess) {
-                forceReloadAfterBrainMutation(conv.id)
                 withContext(Dispatchers.Main) {
                     lytso.code.ui.components.AppToastHelper.showToast(
                         "Thinking step removed from context",
@@ -1631,14 +1703,20 @@ class AgyChatBackend(
             return
         }
         backendScope.launch(Dispatchers.IO) {
-            val res = lytso.code.data.remote.BrainControlClient.deleteAgyArtifact(
+            val res = runBrainMutationAndReload(
                 convId = conv.id,
-                uri = artifact.absoluteUri,
-                name = artifact.name
-            )
+                extractMeta = { it.restarted to it.csrfToken },
+                onSuccessLocal = {
+                    trajectoryEngine.removeArtifactLocally(artifact.absoluteUri, artifact.name)
+                }
+            ) {
+                lytso.code.data.remote.BrainControlClient.deleteAgyArtifact(
+                    convId = conv.id,
+                    uri = artifact.absoluteUri,
+                    name = artifact.name
+                )
+            }
             if (res.isSuccess) {
-                trajectoryEngine.removeArtifactLocally(artifact.absoluteUri, artifact.name)
-                forceReloadAfterBrainMutation(conv.id)
                 withContext(Dispatchers.Main) {
                     lytso.code.ui.components.AppToastHelper.showToast(
                         "Artifact deleted and removed from context",

@@ -369,6 +369,13 @@ func (h *Handler) runBrainMutation(fn func() error) (bool, error) {
 	return false, fn()
 }
 
+func (h *Handler) currentHubCsrf() string {
+	if h.HubManager != nil {
+		return h.HubManager.GetCsrfToken()
+	}
+	return ""
+}
+
 func (h *Handler) EditStepHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -396,7 +403,7 @@ func (h *Handler) EditStepHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": err.Error(), "restarted": restarted})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"success": true, "restarted": restarted})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"success": true, "restarted": restarted, "csrfToken": h.currentHubCsrf()})
 }
 
 func (h *Handler) DeleteThinkingHandler(w http.ResponseWriter, r *http.Request) {
@@ -422,7 +429,7 @@ func (h *Handler) DeleteThinkingHandler(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": err.Error(), "restarted": restarted})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"success": true, "modified": modified, "restarted": restarted})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"success": true, "modified": modified, "restarted": restarted, "csrfToken": h.currentHubCsrf()})
 }
 
 func (h *Handler) DeleteArtifactHandler(w http.ResponseWriter, r *http.Request) {
@@ -455,6 +462,7 @@ func (h *Handler) DeleteArtifactHandler(w http.ResponseWriter, r *http.Request) 
 		"deletedFiles":  deletedFiles,
 		"redactedSteps": redactedSteps,
 		"restarted":     restarted,
+		"csrfToken":     h.currentHubCsrf(),
 	})
 }
 

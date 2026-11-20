@@ -31,6 +31,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"gemini-server/pkg/procutil"
 )
 
 // startTimeout: how long a cold `opencode serve` may take to answer (it is a ~250 MB Bun binary; a phone is slow).
@@ -157,9 +159,9 @@ func (m *Manager) command(ctx context.Context, bin string, args ...string) (*exe
 		if _, err := os.Stat(loader); err != nil {
 			return nil, fmt.Errorf("opencode needs glibc, but the app's glibc runtime is missing (%s): reopen the app to restore it", loader)
 		}
-		cmd = exec.CommandContext(ctx, loader, append([]string{"--library-path", lib, bin}, args...)...)
+		cmd = procutil.CommandContext(ctx, loader, append([]string{"--library-path", lib, bin}, args...)...)
 	} else {
-		cmd = exec.CommandContext(ctx, bin, args...)
+		cmd = procutil.CommandContext(ctx, bin, args...)
 	}
 	env := make([]string, 0, len(os.Environ())+4)
 	hasTmp := false

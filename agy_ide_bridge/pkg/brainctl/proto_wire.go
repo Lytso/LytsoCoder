@@ -256,8 +256,8 @@ func RewriteUserInputStep(payload []byte, newText string, preserveHiddenPrefix b
 	return encodeFields(stepFields), nil
 }
 
-// RewritePlannerResponseStep updates CortexStepPlannerResponse (Step field 20) visible response text (field 1),
-// clears modified_response (field 8), and preserves thinking and tool_calls.
+// RewritePlannerResponseStep updates CortexStepPlannerResponse (Step field 20) visible response text (field 1)
+// and modified_response (field 8, when already present) while preserving thinking and tool_calls.
 func RewritePlannerResponseStep(payload []byte, newText string) ([]byte, error) {
 	stepFields, err := decodeFields(payload)
 	if err != nil {
@@ -272,7 +272,9 @@ func RewritePlannerResponseStep(payload []byte, newText string) ([]byte, error) 
 		return nil, fmt.Errorf("invalid planner_response proto: %w", err)
 	}
 	prFields = replaceOrAddBytesField(prFields, 1, []byte(newText))
-	prFields, _ = deleteFieldNums(prFields, 8)
+	if _, hasMod := firstBytesField(prFields, 8); hasMod {
+		prFields = replaceOrAddBytesField(prFields, 8, []byte(newText))
+	}
 	stepFields = replaceOrAddBytesField(stepFields, 20, encodeFields(prFields))
 	return encodeFields(stepFields), nil
 }

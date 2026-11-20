@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gemini-server/pkg/hub"
+	"gemini-server/pkg/procutil"
 )
 
 // Installing and inspecting the Antigravity CLI (`agy`) on the machine the bridge runs on, so the app can offer
@@ -97,7 +98,7 @@ func agyVersion(bin string) string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, "--version")
+	cmd := procutil.CommandContext(ctx, bin, "--version")
 	cmd.Stdin = nil
 	// stdout only: agy logs to stderr before it is set up (on Android "ERROR: logging before google.Init: I… Initialized
 	// Android local timezone…"), which is not an error and not the version

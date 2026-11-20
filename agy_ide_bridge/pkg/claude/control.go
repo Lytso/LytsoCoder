@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"gemini-server/pkg/procutil"
 )
 
 // controlProc is a short-lived `claude` process used only for control requests (login, usage, model info,
@@ -142,9 +144,7 @@ func (p *controlProc) request(body map[string]interface{}, timeout time.Duration
 
 func (p *controlProc) close() {
 	_ = p.stdin.Close()
-	if p.cmd.Process != nil {
-		_ = p.cmd.Process.Kill()
-	}
+	_ = procutil.Kill(p.cmd)
 }
 
 // oneShot runs `initialize` followed by the given requests in a throwaway process and returns the responses of

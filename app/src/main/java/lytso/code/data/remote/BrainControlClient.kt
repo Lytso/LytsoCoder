@@ -16,6 +16,7 @@ data class BrainMutationResult(
     val success: Boolean = false,
     val modified: Int = 0,
     val restarted: Boolean = false,
+    val csrfToken: String? = null,
     val error: String? = null
 )
 
@@ -25,6 +26,7 @@ data class ArtifactDeleteResult(
     val deletedFiles: List<String> = emptyList(),
     val redactedSteps: Int = 0,
     val restarted: Boolean = false,
+    val csrfToken: String? = null,
     val error: String? = null
 )
 
@@ -62,6 +64,7 @@ object BrainControlClient {
     private val slowClient by lazy {
         AgyBridgeService.instance.client.newBuilder()
             .readTimeout(60, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(false)
             .build()
     }
 

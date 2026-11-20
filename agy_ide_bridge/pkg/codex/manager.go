@@ -30,6 +30,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"gemini-server/pkg/procutil"
 )
 
 const (
@@ -258,7 +260,7 @@ func (m *Manager) ResolveBinary() (string, error) {
 // command builds the exec.Cmd for bin. The Termux package is a normal Android build (it relies on termux-exec,
 // which stays preloaded, to run /bin/bash); the official Linux build is static, so it runs in proot as is.
 func (m *Manager) command(ctx context.Context, bin string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := procutil.CommandContext(ctx, bin, args...)
 	env := os.Environ()
 	hasTmp := false
 	for _, e := range env {
