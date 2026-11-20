@@ -341,7 +341,7 @@ fun LocalToolsInstallDialog(
                                             }
                                         }
                                         Text(
-                                            text = "Auto-downloads verified LytsoCoder rootfs (~350MB) with preconfigured tools and environment",
+                                            text = "Auto-downloads verified LytsoCoder rootfs (~360 MB) with preconfigured tools and environment",
                                             fontSize = 11.5.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -908,7 +908,7 @@ fun LocalToolsInstallDialog(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = when (selectedSourceType) {
-                                        0 -> "Download & Install LytsoCoder (~350MB)"
+                                        0 -> "Download & Install LytsoCoder (~360 MB)"
                                         1 -> "Download Base Termux (~33MB)"
                                         else -> if (selectedFileUri != null) "Install Local ZIP" else "Choose ZIP"
                                     },

@@ -47,10 +47,9 @@ data class DeviceHardwareInfo(
     val supportedAbis: List<String>
 )
 
-/** Where the full rootfs zip is downloaded from (the same file on both). */
+/** Where the full rootfs zip is downloaded from. */
 enum class RootfsMirror(val label: String) {
-    GITHUB("GitHub"),
-    HUGGING_FACE("Hugging Face")
+    GITHUB("GitHub")
 }
 
 sealed class BootstrapSource {
@@ -70,23 +69,19 @@ object LocalEnvironmentManager {
     // Minimum 10 MB required for a real Termux bootstrap archive
     private const val MIN_BOOTSTRAP_SIZE_BYTES = 10 * 1024 * 1024L
 
-    const val HARDCODED_ROOTFS_URL = "https://github.com/Santoshkurmi/antigem/releases/download/rootfs-v2/bootrapz_2026-11-19.zip"
+    const val HARDCODED_ROOTFS_URL = "https://github.com/Lytso/LytsoCoder/releases/download/rootfs-v2/lytsocoder-rootfs-aarch64.zip"
     const val HARDCODED_ROOTFS_TAG = "rootfs-v2"
-    const val HARDCODED_ROOTFS_ASSET = "bootrapz_2026-11-19.zip"
-    const val HARDCODED_ROOTFS_SIZE_BYTES = 400_054_861L
-    const val HUGGINGFACE_ROOTFS_URL = "https://huggingface.co/datasets/santoshkurmi/rootfs-v2/resolve/main/bootrapz_2026-11-19.zip"
-    // pages where the user can download the same zip by hand (then install it with "From a ZIP file")
-    const val GITHUB_ROOTFS_PAGE = "https://github.com/Santoshkurmi/antigem/releases/tag/rootfs-v2"
-    const val HUGGINGFACE_ROOTFS_PAGE = "https://huggingface.co/datasets/santoshkurmi/rootfs-v2/tree/main"
+    const val HARDCODED_ROOTFS_ASSET = "lytsocoder-rootfs-aarch64.zip"
+    const val HARDCODED_ROOTFS_SIZE_BYTES = 377_158_262L
+    // page where the user can download the same zip by hand (then install it with "From a ZIP file")
+    const val GITHUB_ROOTFS_PAGE = "https://github.com/Lytso/LytsoCoder/releases/tag/rootfs-v2"
 
     fun rootfsUrl(mirror: RootfsMirror): String = when (mirror) {
         RootfsMirror.GITHUB -> HARDCODED_ROOTFS_URL
-        RootfsMirror.HUGGING_FACE -> HUGGINGFACE_ROOTFS_URL
     }
 
     fun rootfsPage(mirror: RootfsMirror): String = when (mirror) {
         RootfsMirror.GITHUB -> GITHUB_ROOTFS_PAGE
-        RootfsMirror.HUGGING_FACE -> HUGGINGFACE_ROOTFS_PAGE
     }
 
     private const val NOTIFICATION_CHANNEL_ID = "lytsocoder_bootstrap_install"
@@ -584,7 +579,7 @@ object LocalEnvironmentManager {
             assetName = HARDCODED_ROOTFS_ASSET,
             arch = getBootstrapArch(),
             sizeBytes = HARDCODED_ROOTFS_SIZE_BYTES,
-            sizeFormatted = "~350 MB",
+            sizeFormatted = "~360 MB",
             packageName = context.packageName
         )
         _installerState.value = LocalInstallerState.AwaitingConfirmation(info)
@@ -1410,7 +1405,7 @@ object LocalEnvironmentManager {
                     stepDescription = "Adapting Termux files for $pkg...",
                     progressFraction = 0.88f
                 )
-                updateInstallNotification(appContext, "Adapting Linux Environment", "Rewriting com.termux paths for $pkg...", -1, force = true)
+                updateInstallNotification(appContext, "Adapting Linux Environment", "Adapting rootfs paths for $pkg...", -1, force = true)
                 val onProgress: (Int) -> Unit = { n ->
                     _installerState.value = LocalInstallerState.Configuring(
                         stepDescription = "Adapting Termux files for $pkg ($n files checked)...",

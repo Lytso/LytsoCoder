@@ -6,5 +6,5 @@
   - Go bridge tests: `cd agy_ide_bridge && go test ./...`
   - Android unit tests & debug APK: `./gradlew :app:testDebugUnitTest :app:assembleDebug`
   - Note: `./gradlew :app:preBuild` builds `agy_ide_bridge` (Go `GOOS=android GOARCH=arm64`), compresses it with `xz`, syncs `scripts/*.sh` into `app/src/main/assets/bin/`, and builds `termux-am` (`am.apk`). Always initialize the `termux-am` submodule before building.
-- **Rootfs mirrors**: `LocalEnvironmentManager.kt` fetches `rootfs-v2` (`bootrapz_2026-11-19.zip`) from the upstream GitHub/Hugging Face mirrors unless overridden in `Lytso/LytsoCoder`.
+- **Rootfs & Render assets**: `LocalEnvironmentManager.kt` fetches `rootfs-v2` (`lytsocoder-rootfs-aarch64.zip`) and `RenderBundle.kt` fetches `render-v1` (`lytsocoder-render-bundle-v1.zip`) from `Lytso/LytsoCoder` releases (built via `.github/workflows/rootfs.yml` and `scripts/build_rootfs.py` / `scripts/render_bundle/build_render_bundle.sh`).
 - **Attribution**: LytsoCoder is maintained by `@ItsLytso` and licensed under GPLv3 (forked from `Santoshkurmi/antigem`).

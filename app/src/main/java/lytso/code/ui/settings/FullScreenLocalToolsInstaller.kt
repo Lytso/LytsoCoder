@@ -251,7 +251,7 @@ fun FullScreenLocalToolsInstaller(
                     is LocalInstallerState.Idle -> {
                         PrimaryButton(
                             text = when (selectedSourceType) {
-                                0 -> "Install (~350 MB)"
+                                0 -> "Install (~360 MB)"
                                 1 -> "Install minimal (~33 MB)"
                                 else -> if (selectedFileUri != null) "Install from ZIP" else "Choose a ZIP file"
                             },
@@ -424,7 +424,7 @@ private fun InstallerHero(state: LocalInstallerState, mirrorChoice: Boolean = fa
         text = when (state) {
             is LocalInstallerState.Success -> "The shell, core tools and AGY tools are installed."
             is LocalInstallerState.Error -> if (mirrorChoice) {
-                "Try again, switch to the other download site, or open its page (↗), download the zip and install it with \"From a ZIP file\"."
+                "Try again, or open the download page (↗), download the zip and install it with \"From a ZIP file\"."
             } else {
                 "You can try again, or install from a ZIP file instead."
             }
@@ -454,7 +454,7 @@ private fun SourcePicker(
         SourceOption(
             icon = Icons.Outlined.CloudDownload,
             title = "Full environment",
-            tag = "Recommended · ~350 MB",
+            tag = "Recommended · ~360 MB",
             description = "Verified rootfs with the tools and environment preconfigured.",
             selected = selected == 0,
             onClick = { onSelect(0) }

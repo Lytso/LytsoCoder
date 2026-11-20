@@ -185,4 +185,53 @@ class TermuxRelocationTest {
         assertEquals(bytes.size, out.size)
         assertArrayEquals("x/lytso.code y com.termux.termuxam z lytso.code".toByteArray(), out)
     }
+
+    @Test
+    fun relocatesKnownSourcePackagesIncludingReleaseToDebug() {
+        val sample = (
+            "/data/data/lytso.code/files/usr/lib:/data/data/ai.antigem/files/usr/lib\n" +
+                "-n lytso.code/lytso.code.app.R x ai.antigem com.termux.termuxam.Am com.termux.x11.Loader\n"
+            ).toByteArray()
+
+        val full = String(TermuxRelocation.rewrite(sample, "lytso.cdev"))
+        assertEquals(
+            "/data/data/lytso.cdev/files/usr/lib:/data/data/lytso.cdev/files/usr/lib\n" +
+                "-n lytso.cdev/lytso.cdev.app.R x lytso.cdev com.termux.termuxam.Am com.termux.x11.Loader\n",
+            full
+        )
+
+        val pathsOnly = String(TermuxRelocation.rewrite(sample, "lytso.cdev", pathsOnly = true))
+        assertEquals(
+            "/data/data/lytso.cdev/files/usr/lib:/data/data/lytso.cdev/files/usr/lib\n" +
+                "-n lytso.code/lytso.cdev.app.R x ai.antigem com.termux.termuxam.Am com.termux.x11.Loader\n",
+            pathsOnly
+        )
+    }
+
+    @Test
+    fun relocateTreeRewritesFilesAndSymlinksFromReleaseToDebug() {
+        val dir = java.nio.file.Files.createTempDirectory("reloc-multi").toFile()
+        try {
+            val binDir = File(dir, "usr/bin").apply { mkdirs() }
+            val runpathFile = File(binDir, "bash.bin").apply {
+                writeBytes("/data/data/lytso.code/files/usr/lib\u0000com.termux.termuxam.Am".toByteArray())
+            }
+            val link = File(binDir, "sh")
+            java.nio.file.Files.createSymbolicLink(link.toPath(), File("/data/data/lytso.code/files/usr/bin/bash").toPath())
+
+            val stats = TermuxRelocation.relocateTree(dir, "lytso.cdev")
+            assertEquals(1, stats.patchedFiles)
+            assertEquals(1, stats.links)
+            assertArrayEquals(
+                "/data/data/lytso.cdev/files/usr/lib\u0000com.termux.termuxam.Am".toByteArray(),
+                runpathFile.readBytes()
+            )
+            assertEquals(
+                "/data/data/lytso.cdev/files/usr/bin/bash",
+                java.nio.file.Files.readSymbolicLink(link.toPath()).toString()
+            )
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
 }
