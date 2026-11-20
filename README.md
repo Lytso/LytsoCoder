@@ -1,155 +1,170 @@
 <div align="center">
 
-<img src="docs/readme/icon.svg" alt="LytsoCoder app icon" width="112">
+<img src="docs/readme/lytsocoder-icon.svg" alt="LytsoCoder app emblem" width="112">
 
 # LytsoCoder
 
-*A mobile AI coding workspace by @ItsLytso — carry a full Linux environment, editor, browser, and coding agents in your pocket.*
-
-**An AI coding workspace for Android: Antigravity, Claude Code, OpenCode and Codex agents, a real Linux terminal, a code editor and a browser the agent can control, all in one app.**
+*An independent mobile AI coding workspace maintained by **@ItsLytso** — Linux terminal, code editor, controllable browser, and local agent orchestration for Android.*
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://developer.android.com/jetpack/compose)
-[![Go](https://img.shields.io/badge/Bridge-Go-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
-[![License](https://img.shields.io/badge/License-GPLv3-blue?style=flat-square)](LICENSE)
-[![Releases](https://img.shields.io/github/v/release/Lytso/LytsoCoder?style=flat-square&label=Download)](https://github.com/Lytso/LytsoCoder/releases)
+[![Go](https://img.shields.io/badge/Bridge-Go%201.26-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
+[![Android](https://img.shields.io/badge/Android-11%2B%20Seccomp%20Safe-3DDC84?style=flat-square&logo=android&logoColor=white)](https://developer.android.com)
+[![License](https://img.shields.io/badge/License-GPL--3.0--or--later-blue?style=flat-square)](LICENSE)
+[![Releases](https://img.shields.io/github/v/release/Lytso/LytsoCoder?style=flat-square&label=Releases)](https://github.com/Lytso/LytsoCoder/releases)
 
-[Download](https://github.com/Lytso/LytsoCoder/releases) · [Plugin SDK](extension_docs/README.md) · [User Guide](user_docs/README.md)
-
-<br>
-
-<img src="docs/readme/hero.webp" alt="LytsoCoder on a phone: code editor, live browser preview, Claude Code chat, Linux terminal and model picker" width="100%">
+[Releases](https://github.com/Lytso/LytsoCoder/releases) · [Plugin SDK](extension_docs/README.md) · [User Guide](user_docs/README.md) · [Legal & Copyright](#legal-licensing--copyright-compliance) · [NOTICE](NOTICE)
 
 </div>
 
 > [!IMPORTANT]
-> ### LytsoCoder runs under its own package: `lytso.code`
-> **LytsoCoder** uses its own package IDs (**`lytso.code`** for release, **`lytso.cdev`** for debug) and isolated local ports (**`1240/1241/8770`** release, **`1242/1243/8771`** debug), so it installs and runs side-by-side with **Termux** (`com.termux`) and **AntiGem** (`ai.antigem`) without conflicts.
+> ### Independent Package & Port Isolation (`lytso.code` / `lytso.cdev`)
+> **LytsoCoder** runs under its own Android application IDs (**`lytso.code`** for release, **`lytso.cdev`** for debug) and isolated loopback ports (**`1240/1241/8770`** release, **`1242/1243/8771`** debug), allowing side-by-side installation alongside **Termux** (`com.termux`) or **AntiGem** (`ai.antigem`) without package or port collisions.
 >
-> - **Byte-for-byte native Termux packages:** `lytso.code` and `lytso.cdev` are 10 characters long (just like `com.termux`), so Termux packages and binaries are relocated in place without proot and without slowdown.
-> - **Migrating from AntiGem or Termux:**
->   1. In the old app: **Settings → Backups & Restore → Back up environment** (tick *Include SSH keys and sign-ins* if needed; never share that file).
->   2. Install **`LytsoCoder-v2.x.x.apk`** from [Releases](https://github.com/Lytso/LytsoCoder/releases).
->   3. On LytsoCoder's setup screen, choose **From a ZIP file** and pick your backup. Every `com.termux` path is rewritten for `lytso.code` while it restores.
+> - **Native Termux relocation:** `lytso.code` and `lytso.cdev` are 10 ASCII bytes (exact byte length of `com.termux`), allowing Termux binaries and paths to be relocated in place without proot overhead.
+> - **Migrating from an existing backup:**
+>   1. Export an environment backup from your previous app (**Settings → Backups & Restore → Back up environment**; keep backup files private).
+>   2. Install **`LytsoCoder`** from [Releases](https://github.com/Lytso/LytsoCoder/releases).
+>   3. Choose **From a ZIP file** during initial setup; `TermuxRelocation` automatically rewrites `com.termux` paths for `lytso.code` / `lytso.cdev`.
 
 ---
 
-## What it is
+## Overview
 
-LytsoCoder runs four coding agents on your phone:
+LytsoCoder provides a unified local Android workspace—combining a Jetpack Compose chat interface, a Go bridge daemon (`agy_ide_bridge`), a native Termux-compatible Linux userland, Sora code editor, Git workflow, and an automation-ready WebView browser—designed to work with coding agent CLIs installed and authorized by the user inside their own environment:
 
-- **Antigravity (`agy`)**: Google's official `agy` CLI, installed with Google's own installer, runs inside the app's Linux environment.
-- **Claude Code**: Anthropic's official `claude` CLI runs inside the app's Linux environment, and the app talks to it over its stream-json protocol, with one CLI process per chat.
-- **OpenCode**: the open-source coding agent. It works with 200+ providers with your own keys, any OpenAI-compatible API, and free models.
-- **Codex**: OpenAI's official `codex` CLI runs inside the app's Linux environment, and the app talks to it through its `app-server` protocol. Sign in with your ChatGPT account.
+- **Antigravity (`agy`)**: Connects via the local hub RPC interface when installed by the user.
+- **Claude Code (`claude`)**: Talks to user-installed CLI processes over structured `stream-json` I/O (one managed session per chat).
+- **OpenCode (`opencode`)**: Connects to open-source OpenCode (`opencode serve`) with 200+ custom or local providers (Ollama, LM Studio, vLLM, LiteLLM, OpenRouter, custom endpoints).
+- **Codex (`codex`)**: Talks to the user's local Codex CLI `app-server` JSON-RPC interface.
 
-You can turn on any of the four agents, on first launch or later in **Settings → Agents**. An agent you turn off does not run.
-
-**Use the models you want:** OpenCode connects to 200+ providers, including local models with Ollama or LM Studio, and Claude Code can run on OpenRouter, Kimi, DeepSeek, Z.ai (GLM) or any Anthropic-compatible API.
-
-The app reads each agent's structured output, not its terminal text. That is how it shows streaming replies, tool approvals, the agent's questions, subagents and file changes as normal chat UI.
+You can enable or disable each agent independently during onboarding or in **Settings → Agents**. Disabled agents are never launched.
 
 ---
 
-## Features
+## Key Features
 
-### Bring your own models: third-party providers
-- **OpenCode (200+ providers)**: ChatGPT / OpenAI, GitHub Copilot, Claude subscription, SuperGrok / xAI, OpenCode Zen/Go, OpenRouter, Anthropic API, Ollama, LM Studio, vLLM, LiteLLM, or any custom OpenAI/Anthropic-compatible endpoint.
-- **Claude Code**: One-tap presets for **OpenRouter, Kimi (Moonshot), DeepSeek and Z.ai (GLM)**, plus any Anthropic-compatible base URL and key.
+### Enhanced Conversation & Context Control
+- **Editable Global Context & Per-Chat System Prompts**: Customize instructions injected into context globally and per conversation without locked boilerplate.
+- **Non-Destructive In-Place Editing**: Edit both earlier user prompts and AI replies directly in place (inside local SQLite trajectory storage via `brainctl` or Claude JSONL transcripts) without truncating or resetting newer messages.
+- **Thinking-Step Pruning**: Delete individual reasoning/thinking steps from conversation history and disk logs to break reasoning loops and reclaim context window space.
+- **Obsolete Artifact Cleanup & Context Redaction**: Delete outdated artifacts from disk while redacting their heavy payloads inside SQLite/transcript history so the model stops re-reading discarded drafts.
+- **Fork / Branch Anywhere**: Branch a new independent conversation from any historical message—old or recent—while preserving the original thread intact.
+- **Zero-Disconnect Brain Sync**: `agy_ide_bridge` pauses the hub cleanly on Android 11+ using `syscall.Kill` (`pkg/procutil`, avoiding blocked `pidfd_send_signal` seccomp calls), rotates CSRF tokens automatically, and reloads the live trajectory stream without dropping the app connection.
 
-### Agents, chat & voice
-- Live streaming replies, collapsible thinking, tool cards, diffs and subagent progress.
-- Tool approvals, plan approval and multiple-choice questions answered directly inside chat.
-- Switch model, effort, thinking and permission mode mid-chat.
-- Image/file attachments, voice dictation, audio playback, STEM/LaTeX/Mermaid rendering, and floating chat bubble.
-- **Jarvis voice assistant**: hands-free control over the app, projects, tasks, approvals and subagents ([docs/jarvis.md](docs/jarvis.md)).
+### Agents, Voice & BYO Providers
+- Live streaming replies, collapsible thinking blocks, inline diffs, subagent tracking, tool approvals, plan approvals, and structured multiple-choice questions (`ask_question`).
+- Mid-chat switching for model, reasoning effort, thinking budget, and permission mode.
+- **OpenCode & Claude Code BYO Endpoints**: Presets and custom base URLs for OpenRouter, Moonshot/Kimi, DeepSeek, Z.ai (GLM), Ollama, LM Studio, or any OpenAI/Anthropic-compatible server.
+- Image/file attachments, voice dictation, STEM/LaTeX/Mermaid/TikZJax rendering, floating bubble, and **Jarvis** hands-free control ([docs/jarvis.md](docs/jarvis.md)).
 
-### Built-in MCP servers
-Each preset can be enabled in **Settings → MCP Servers**:
+### Built-in MCP Servers
+Toggleable per preset in **Settings → MCP Servers**:
 
-| MCP | What the agent can do |
+| MCP Server | Capabilities |
 | :--- | :--- |
-| **Browser** | Open, switch and close tabs, click/type on pages, run JavaScript, inspect the DOM, console logs, network and screenshots. |
-| **Terminal** | Create terminal sessions, send commands, read output, kill processes, and change terminal theme/font. |
-| **Android** | Read UI tree, tap, swipe, scroll, type, press keys, screenshots, launch/list apps, and ADB actions. |
-| **Notes & To-dos** | List, read, create, edit and delete notes and to-do items. |
-| **Custom Plugin / Plugin Developer** | Use or build custom browser/MCP plugins with JavaScript workers and Markdown skills. |
-| **Jarvis** | Control the app, tasks, missions, timers, IDE and settings by voice or tool calls. |
-| **Theme** | List, switch, create, edit, import and export color themes. |
-| **REA** | Reverse engineering MCP (APK, Flutter, React Native, native libs) in an Ubuntu proot container. |
+| **Browser** | Tab management, DOM inspection, JS evaluation, console/network capture, screenshots, page interactions. |
+| **Terminal** | Multi-session shell management, command dispatch, output reading, process control, theme customization. |
+| **Android** | Accessibility/UI tree inspection, input actions, screenshots, app management, ADB integration. |
+| **Notes & To-dos** | Local notes and task-list persistence across sessions. |
+| **Custom Plugins** | JS worker + Markdown skill SDK for user-authored browser/MCP extensions ([extension_docs](extension_docs/README.md)). |
+| **Jarvis** | Task, timer, mission, project, and IDE orchestration via tool calls or voice. |
+| **Theme** | Color scheme switching, creation, import, and export. |
+| **REA** | Isolated Ubuntu proot environment for mobile binary/app inspection tasks. |
 
-### Linux terminal, Code editor, Browser & Mini Apps
-- **Linux terminal**: Full Termux-based Linux environment (`apt`/`pkg`, bash, Python, Node.js, Git, Go) running natively at full speed without proot. Includes **LytsoTerm** / **Termux** optional standalone launcher icon, **ADB Connect**, and **X11 Desktop** (XFCE/LXQt).
-- **Code editor & Git**: Sora Editor with syntax highlighting, tabs, file explorer, diffs, commit/pull/push, and GitHub CLI integration.
-- **In-app Browser & Mini Apps**: Dev preview browser with Eruda DevTools, plus sandboxed full-screen HTML/JS/CSS Mini Apps.
-- **Connect to PC & Server mode**: Pair with a PC over Wi-Fi/SSH or run the bridge and agents on a remote Linux VPS ([docs/remote-server.md](docs/remote-server.md)).
-- **Backups & Protection**: Back up/restore rootfs, projects and chats to `Download/LytsoCoder/backups`, plus uninstall shield and Clear Storage interceptor.
-
----
-
-## Download & Termux Relocation
-
-Get the latest APK from [Releases](https://github.com/Lytso/LytsoCoder/releases).
-
-Termux packages are compiled for `/data/data/com.termux/files/usr`. Because `lytso.code` and `lytso.cdev` are 10 characters long (the exact byte length of `com.termux`), LytsoCoder rewrites `com.termux` byte-for-byte in file paths, scripts, symlinks and binaries during bootstrap/rootfs installation and automatically via an `apt` hook and `dpkg` wrapper. `am.apk` is compiled directly from `termux-am` for `lytso.code` / `lytso.cdev`.
+### Terminal, Editor, Browser & Server Mode
+- **Linux Environment**: Native `aarch64` Termux-based shell (`apt`/`pkg`, bash, zsh, Python, Node.js, Git, Go) without proot slowdown, optional standalone terminal launcher, **ADB Connect**, and **X11 Desktop** support.
+- **Code Editor & Git**: Sora Editor with TextMate grammars, multi-tab workspace, file tree, diff viewer, and Git/GitHub CLI tooling.
+- **Browser & Mini Apps**: Embedded preview browser with DevTools and sandboxed HTML/JS/CSS Mini Apps.
+- **Remote PC / VPS Mode**: Connect over SSH/Wi-Fi or run `agy_ide_bridge` on an external Linux host ([docs/remote-server.md](docs/remote-server.md)).
+- **Backups & Data Protection**: Export/restore rootfs, projects, and chats (`Download/LytsoCoder/backups`).
 
 ---
 
-## Building from source
+## Building from Source
 
-**Requirements:** JDK 21+, Android SDK (Compile SDK 36) and Go 1.26+ for the bridge.
+**Requirements:** JDK 21+, Android SDK (Compile SDK 36), and Go 1.26+.
 
 ```bash
 git clone --recursive https://github.com/Lytso/LytsoCoder.git
 cd LytsoCoder
 
-# Run Go bridge tests
+# 1. Run Go bridge unit tests (including seccomp-safe procutil, brainctl, and hub pause/restart tests)
 cd agy_ide_bridge && go test ./... && cd ..
 
-# Run Android unit tests and build Debug APK
+# 2. Run Android unit tests and compile Debug APK (includes embedded Go bridge binary)
 ./gradlew :app:testDebugUnitTest :app:assembleDebug
 
-# Or package via helper script
+# 3. Package APK artifacts into output/
 ./scripts/build_all_apks.sh
 ```
 
-APKs are written to `app/build/outputs/apk/<buildType>/` and `output/`.
+To build reproducible `rootfs-v2` or offline STEM `render-v1` archives independently from upstream open manifests:
+- Rootfs builder: `python3 scripts/build_rootfs.py --package lytso.code --output output/lytsocoder-rootfs-aarch64.zip`
+- Render bundle builder: `bash scripts/render_bundle/build_render_bundle.sh`
 
 ---
 
-## Project structure
+## Project Structure
 
 ```text
 LytsoCoder/
 ├── app/src/main/
 │   ├── java/lytso/code/
-│   │   ├── data/          # Agent backends (agy, claude, opencode, codex), terminal, ADB, automation, notes, updater
-│   │   ├── domain/        # Chat models and parsing
-│   │   └── ui/            # Compose screens: chat, IDE, browser, notes, settings
-│   ├── java/com/termux/   # Termux terminal-view widget
-│   ├── java/lytso/code/app/  # entry points the Termux tools call (termux-open, termux-wake-lock, …)
-│   └── assets/browser-runtime/  # Extension host and Chrome API for plugins
-├── agy_ide_bridge/        # Go bridge: agy hub, Claude Code relay, Git, plugins
-├── extensions/            # Bundled plugins
-├── extension_docs/        # Plugin SDK documentation and examples
-├── scripts/               # Build, backup and restore scripts
-└── version.json           # Version and changelog used by the in-app updater
+│   │   ├── data/                # Agent backends (agy, claude, opencode, codex), backups, remote bridge/hub clients
+│   │   ├── domain/              # Chat models, TrajectoryEngine, STEM/timeline parsing
+│   │   └── ui/                  # Jetpack Compose UI: chat, IDE, browser, notes, settings
+│   ├── java/com/termux/         # Termux terminal-view integration
+│   ├── java/lytso/code/app/     # Termux intent/API entry points for lytso.code / lytso.cdev
+│   └── assets/browser-runtime/  # Extension host & runtime APIs
+├── agy_ide_bridge/
+│   ├── main.go                  # Local Go bridge HTTP/WebSocket server & hub supervisor
+│   └── pkg/
+│       ├── brainctl/            # Direct SQLite protobuf & transcript editor (in-place edits, pruning, redaction)
+│       ├── procutil/            # Android 11+ seccomp-safe signal/process helpers (syscall.Kill)
+│       ├── hub/, claude/, codex/, opencode/, checkpoint/, memory/, plugins/, security/, ws/
+├── extensions/                  # Bundled open-source browser/MCP extensions
+├── extension_docs/              # Plugin SDK documentation
+├── user_docs/                   # User guide documentation
+├── scripts/                     # APK build, backup/restore, rootfs, and STEM bundle builders
+├── LICENSE                      # Full GNU GPL v3.0 license text
+├── NOTICE                       # Copyright provenance, dated changelog of modifications & third-party notices
+└── version.json                 # Version metadata for the built-in updater
 ```
 
 ---
 
-## Privacy & Analytics
+## Privacy & Zero Telemetry
 
-LytsoCoder has **no TelemetryDeck or third-party analytics SDK**. No install pings, session tracking, chats, prompts, code, or device identifiers are sent to any analytics service.
+LytsoCoder contains **zero TelemetryDeck or third-party analytics SDKs**. The app does not send install pings, usage telemetry, chat transcripts, prompts, source code, or device identifiers to analytics servers. Network connections go only to endpoints you configure (local loopback bridge, your remote server, GitHub, or your selected AI/API providers).
 
 ---
 
-## Disclaimer
+## Legal, Licensing & Copyright Compliance
 
-LytsoCoder is an independent project maintained by `@ItsLytso`. It is not affiliated with, endorsed by or sponsored by Google, Anthropic, OpenAI, OpenCode or any other AI provider. Antigravity, Claude, Claude Code, Codex and other product names are trademarks of their owners and are used here only to say which tools the app works with.
+### 1. Open-Source License (GNU GPL v3.0 or later)
+LytsoCoder is free software released under the terms of the **GNU General Public License, Version 3.0, or (at your option) any later version** ([GPL-3.0-or-later](LICENSE)). Full license text is located in [LICENSE](LICENSE), and detailed component attributions are recorded in [NOTICE](NOTICE).
 
-LytsoCoder is free software, provided as is, without warranty, as described in the [license](LICENSE).
+### 2. Upstream Provenance & Modification Notice (GPLv3 §§ 4 & 5)
+In strict compliance with GNU GPLv3 Sections 4 and 5:
+- **Upstream Work:** LytsoCoder is a modified derivative fork of [`Santoshkurmi/antigem`](https://github.com/Santoshkurmi/antigem).
+- **Preserved Upstream Copyright:** `Copyright (C) 2026 Santosh Kurmi` — Licensed under GNU GPL v3.0 or later.
+- **Modifications Notice:** Original additions and modifications are `Copyright (C) 2026 @ItsLytso` (likewise licensed under GNU GPL v3.0 or later), dated **2026-11-20** in [NOTICE](NOTICE) and recorded in commit history (`lytso.code` rebrand & isolation, telemetry removal, independent rootfs/render asset builders, Enhanced Conversation & Context Control, and Android 11+ seccomp-BPF compatibility fixes).
 
-## License & Attribution
+### 3. Corresponding Source Availability (GPLv3 § 6)
+The complete corresponding source code for LytsoCoder (Android application, Go bridge, submodules, and build scripts) is publicly hosted at [`https://github.com/Lytso/LytsoCoder`](https://github.com/Lytso/LytsoCoder). Source code for upstream Termux userland packages referenced by the optional rootfs builder is maintained by Termux at [`https://github.com/termux/termux-packages`](https://github.com/termux/termux-packages).
 
-Maintained by **@ItsLytso**. Forked from [Santoshkurmi/antigem](https://github.com/Santoshkurmi/antigem).
-Copyright (C) 2026 Santosh Kurmi. Licensed under the [GNU General Public License v3.0](LICENSE) or any later version.
+### 4. Trademarks & Non-Affiliation Disclaimer (Nominative Use)
+**LytsoCoder** and **@ItsLytso** are completely independent and are **not** affiliated with, endorsed by, sponsored by, or officially connected with Google LLC, Anthropic PBC, OpenAI, L.L.C., OpenCode, the Termux Project, or upstream maintainers.
+
+All product names, service names, CLI identifiers, and trademarks—including **Android**, **Antigravity (`agy`)**, **Claude**, **Claude Code**, **OpenAI**, **Codex**, **ChatGPT**, **OpenCode**, **GitHub**, and **Termux**—remain the exclusive property of their respective owners and are used here strictly under **nominative fair use** to describe technical compatibility and supported workflows.
+
+### 5. Third-Party Software, APIs & User Responsibility
+- **No bundled proprietary models or credentials:** This Git repository and the compiled APK do not contain proprietary LLM weights, third-party API keys, paid subscriptions, or DRM/access circumvention tools.
+- **User-supplied tools & compliance:** Users independently obtain, authenticate, and operate third-party CLIs, accounts, and API endpoints at their own discretion and are solely responsible for complying with each provider's Terms of Service, usage limits, and applicable software licenses.
+- **Optional release archives:** Any optional environment archives published under Releases (such as `rootfs-v2` or `render-v1`) are convenience packages built via the transparent scripts in `scripts/` directly from public upstream repositories/manifests and do not grant any proprietary license outside upstream terms.
+
+### 6. Disclaimer of Warranty & Limitation of Liability (GPLv3 §§ 15–16)
+THIS SOFTWARE IS PROVIDED **"AS IS"**, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS, MAINTAINERS, OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, DATA LOSS, ACCOUNT ACTION, OR OTHER LIABILITY ARISING FROM THE USE OF THIS SOFTWARE OR THIRD-PARTY TOOLS.
+
+### 7. Good-Faith Copyright, Trademark & Removal Contact
+We respect the intellectual property and licensing rights of all creators and organizations. If you are a copyright owner, trademark holder, or upstream contributor and believe that any source file, asset, attribution line, or GitHub release archive in this repository raises a legal or licensing concern, please open an issue at [`https://github.com/Lytso/LytsoCoder/issues`](https://github.com/Lytso/LytsoCoder/issues) with details for prompt, good-faith review, correction, or removal.

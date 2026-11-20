@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="512" height="512" role="img" aria-label="LytsoCoder emblem">
+  <defs>
+    <linearGradient id="lcBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0D101B"/>
+      <stop offset="55%" stop-color="#14192B"/>
+      <stop offset="100%" stop-color="#0B0E17"/>
+    </linearGradient>
+    <linearGradient id="lcBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="50%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#2DD4BF"/>
+    </linearGradient>
+    <linearGradient id="lcAccent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A78BFA"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+    <radialGradient id="lcGlow" cx="50%" cy="38%" r="52%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#lcBg)"/>
+  <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#lcGlow)"/>
+  <rect x="7.5" y="7.5" width="113" height="113" rx="26.5" fill="none" stroke="url(#lcBorder)" stroke-width="3"/>
+
+  <!-- Left chevron > -->
+  <path d="M35 45 L57 64 L35 83" fill="none" stroke="#F8FAFC" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Prompt cursor bar _ -->
+  <line x1="63" y1="83" x2="93" y2="83" stroke="url(#lcAccent)" stroke-width="8.5" stroke-linecap="round"/>
+  <!-- Spark node / agent indicator -->
+  <circle cx="88" cy="44" r="6" fill="url(#lcAccent)"/>
+</svg>
