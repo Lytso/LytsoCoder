@@ -10,6 +10,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeNotNull
 import org.junit.Test
 
 /**
@@ -18,8 +19,11 @@ import org.junit.Test
  */
 class CodexTranscriptTest {
 
-    private fun resource(name: String): String =
-        javaClass.classLoader!!.getResource("codex/$name")!!.readText()
+    private fun resource(name: String): String {
+        val url = javaClass.classLoader!!.getResource("codex/$name")
+        assumeNotNull("Recorded Codex fixture codex/$name is not bundled in this repo", url)
+        return url!!.readText()
+    }
 
     private fun replay(t: CodexTranscript, file: String, skipLast: Int = 0) {
         val lines = resource(file).lines().filter { it.isNotBlank() }

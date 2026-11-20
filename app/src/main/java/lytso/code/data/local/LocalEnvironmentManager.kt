@@ -438,25 +438,31 @@ object LocalEnvironmentManager {
             |esac
             |shift
             |
-            |EXTRA_ARGS=()
+            |INPUT=""
             |if [ ! -t 0 ]; then
             |    INPUT=${'$'}(timeout 0.1 cat 2>/dev/null || true)
-            |    if [ -n "${'$'}INPUT" ]; then
-            |        EXTRA_ARGS=(--es text "${'$'}INPUT" --es message "${'$'}INPUT" --es content "${'$'}INPUT")
-            |    fi
             |fi
             |
             |TMP_DIR="${'$'}{TMPDIR:-$prefix/tmp}"
             |mkdir -p "${'$'}TMP_DIR"
             |TMP_OUT="${'$'}TMP_DIR/api_out.${'$'}${'$'}"
             |
-            |am broadcast --user ${'$'}(( ${'$'}(id -u) / 100000 )) \
-            |    -a "$pkg.api" \
-            |    -n "$pkg/lytso.code.data.receiver.TermuxApiReceiver" \
-            |    --es "api_method" "${'$'}METHOD" \
-            |    --es "socket_output" "${'$'}TMP_OUT" \
-            |    "${'$'}{EXTRA_ARGS[@]}" \
-            |    "${'$'}@" > /dev/null 2>&1
+            |if [ -n "${'$'}INPUT" ]; then
+            |    am broadcast --user ${'$'}(( ${'$'}(id -u) / 100000 )) \
+            |        -a "$pkg.api" \
+            |        -n "$pkg/lytso.code.data.receiver.TermuxApiReceiver" \
+            |        --es "api_method" "${'$'}METHOD" \
+            |        --es "socket_output" "${'$'}TMP_OUT" \
+            |        --es text "${'$'}INPUT" --es message "${'$'}INPUT" --es content "${'$'}INPUT" \
+            |        "${'$'}@" > /dev/null 2>&1
+            |else
+            |    am broadcast --user ${'$'}(( ${'$'}(id -u) / 100000 )) \
+            |        -a "$pkg.api" \
+            |        -n "$pkg/lytso.code.data.receiver.TermuxApiReceiver" \
+            |        --es "api_method" "${'$'}METHOD" \
+            |        --es "socket_output" "${'$'}TMP_OUT" \
+            |        "${'$'}@" > /dev/null 2>&1
+            |fi
             |
             |# only these answer (BatteryStatus, Clipboard without "set"): the receiver writes the answer to TMP_OUT after am
             |# returns, so it is waited for (up to 5 s); an empty clipboard is an empty file
