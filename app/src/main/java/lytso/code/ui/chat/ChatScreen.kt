@@ -205,10 +205,8 @@ fun ChatScreen(
     val openCodeState by openCodeBackend.state.collectAsState()
     val openCodeStatus by openCodeBackend.status.collectAsState()
     val openCodeModelsError by openCodeBackend.modelsError.collectAsState()
-    val openCodeConnected by openCodeBackend.connectedProviders.collectAsState()
-    val openCodeModelCount = openCodeBackend.availableModels.collectAsState().value.size
     var openOpenCodeSettings by remember { mutableStateOf(false) }
-    // the OpenCode page Settings opens on (Server & install for the Install button, Providers from the model picker)
+    // the OpenCode page Settings opens on (OpenCode CLI for the Install button, Providers from the model picker)
     var openCodeSettingsPage by remember { mutableStateOf<lytso.code.ui.opencode.OpenCodeSettingsPage?>(null) }
     LaunchedEffect(Unit) {
         openCodeBackend.toasts.collect {
@@ -221,9 +219,8 @@ fun ChatScreen(
     val codexStatus by codexBackend.status.collectAsState()
     val codexAccount by codexBackend.account.collectAsState()
     val codexModelsError by codexBackend.modelsError.collectAsState()
-    val codexLimits by codexBackend.rateLimits.collectAsState()
     var openCodexSettings by remember { mutableStateOf(false) }
-    // the Codex page Settings opens on (Server & install for the Install button, Account for Sign in, MCP for /mcp)
+    // the Codex page Settings opens on (Account & CLI for the Install button and Sign in, MCP for /mcp)
     var codexSettingsPage by remember { mutableStateOf<lytso.code.ui.codex.CodexSettingsPage?>(null) }
     LaunchedEffect(Unit) {
         codexBackend.toasts.collect {
@@ -329,6 +326,7 @@ fun ChatScreen(
     val isFloatingNetworkInspectorEnabled by viewModel.isFloatingNetworkInspectorEnabled.collectAsState()
     var showNetworkInspectorDialog by remember { mutableStateOf(false) }
     val hasSeenTerminalLauncherOnboarding by viewModel.authPreferences.hasSeenTerminalLauncherOnboarding.collectAsState(initial = true)
+    val hasSeenGemmyIntro by viewModel.authPreferences.hasSeenGemmyIntro.collectAsState(initial = true)
     val isTranscribingAudio by viewModel.isTranscribingAudio.collectAsState()
     val pendingLoginUrl by viewModel.pendingLoginUrl.collectAsState()
     val agyLoginIssue by viewModel.agyLoginIssue.collectAsState()
@@ -534,6 +532,12 @@ fun ChatScreen(
         (claudeState == lytso.code.data.agent.claude.ClaudeStatus.SIGNED_OUT || claudeState == lytso.code.data.agent.claude.ClaudeStatus.SIGNING_IN)
     ) lytso.code.data.agent.claude.ClaudeStatus.READY else claudeState
     val claudeStatusError by viewModel.claudeAccount.statusError.collectAsState()
+    // a reply failed because the Claude sign-in expired while the app stayed open: once the re-check confirms the
+    // sign-out, show the sign-in (as after a fresh start) instead of only the error; custom-provider chats need no login
+    val claudeNeedsLogin by claudeBackend.needsLogin.collectAsState()
+    LaunchedEffect(claudeNeedsLogin, claudeChatState) {
+        if (claudeNeedsLogin && isClaudeChat && claudeChatState == lytso.code.data.agent.claude.ClaudeStatus.SIGNED_OUT) showClaudeLogin = true
+    }
     val openClaudeSetup = {
         claudeSettingsPage = lytso.code.ui.claude.ClaudeSettingsPage.ACCOUNT
         showSettingsDialog = true
@@ -548,6 +552,15 @@ fun ChatScreen(
         lytso.code.ui.components.AppToastHelper.showToast("Checking Claude Code…", lytso.code.ui.components.ChatToastType.INFO)
         viewModel.claudeAccount.refreshStatus()
     }
+    val agyCliInfo by lytso.code.data.remote.BridgeInfo.agyCli.collectAsState()
+    val agyNotInstalled = lytso.code.domain.model.AgentKind.AGY in enabledAgents &&
+        lytso.code.ui.agents.agyNotInstalled(systemConnectionState, agyCliInfo)
+    // installs right away; Settings → Antigravity → Account & CLI shows the progress (the hub starts when it is done)
+    val installAgy = {
+        lytso.code.data.remote.BridgeInfo.installAgy()
+        requestedSettingsSection = lytso.code.ui.settings.SettingsSection.AGY_CLI
+        showSettingsDialog = true
+    }
     val agyEntry = if (lytso.code.domain.model.AgentKind.AGY in enabledAgents) {
         lytso.code.ui.agents.agyStatusEntry(
             state = systemConnectionState,
@@ -561,7 +574,9 @@ fun ChatScreen(
                 lytso.code.ui.components.AppToastHelper.showToast("Reconnecting to Antigravity…", lytso.code.ui.components.ChatToastType.INFO)
                 viewModel.retryConnections()
             },
-            onRestartServer = restartLocalServer
+            onRestartServer = restartLocalServer,
+            notInstalled = agyNotInstalled,
+            onInstall = installAgy
         )
     } else null
     val claudeEntry = if (lytso.code.domain.model.AgentKind.CLAUDE in enabledAgents) {
@@ -600,7 +615,7 @@ fun ChatScreen(
             // installs right away; Settings → Codex shows the progress
             onSetup = {
                 codexBackend.startCliJob("install")
-                codexSettingsPage = lytso.code.ui.codex.CodexSettingsPage.SERVER
+                codexSettingsPage = lytso.code.ui.codex.CodexSettingsPage.ACCOUNT
                 showSettingsDialog = true
             },
             // starts the sign-in; Settings → Codex shows the code or the browser link
@@ -1978,7 +1993,10 @@ fun ChatScreen(
                     // existing chats too: while one loads, show the loading skeleton like for any other chat
                     val isExistingConversation = currentConv != null && currentConv?.title != "New Chat" &&
                         (conversations.any { it.id == currentConv?.id } || jarvisConversations.any { it.id == currentConv?.id })
-                    val isExistingChat = messages.isEmpty() && isExistingConversation && isLoadingConversation
+                    // agy missing: the hub's "agy is not installed" error is also this chat's error, and an existing chat
+                    // never finishes loading. Both step aside for the empty view's "not installed" card with Install.
+                    val agyMissingHere = isAgyChat && agyNotInstalled
+                    val isExistingChat = messages.isEmpty() && isExistingConversation && isLoadingConversation && !agyMissingHere
                     Log.d("CHAT_OPEN_DEBUG", "🖥️ [ChatScreen Render] convId=${currentConv?.id}, title='${currentConv?.title}', isLoading=$isLoadingConversation, isExisting=$isExistingChat, msgCount=${messages.size}, error=$conversationError, isServerStopped=$isServerStopped")
 
                     if (isAgyChat && isServerStopped && messages.isEmpty()) {
@@ -2037,7 +2055,7 @@ fun ChatScreen(
                         } else {
                             lytso.code.ui.components.EngineWarmingUpView()
                         }
-                    } else if (!conversationError.isNullOrBlank() && messages.isEmpty() && (isExistingConversation || currentConv != null)) {
+                    } else if (!conversationError.isNullOrBlank() && messages.isEmpty() && (isExistingConversation || currentConv != null) && !agyMissingHere) {
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -2091,7 +2109,7 @@ fun ChatScreen(
                         }
                     } else if (isExistingChat) {
                         lytso.code.ui.components.ConversationLoadingSkeleton()
-                    } else if (messages.isEmpty()) {
+                    } else if (messages.isEmpty() && voiceCallItems.isEmpty()) {
                         BoxWithConstraints(
                             modifier = Modifier.fillMaxSize()
                         ) {
@@ -2165,6 +2183,17 @@ fun ChatScreen(
                                         actionLabel = codexEntry?.action?.label,
                                         onAction = { codexEntry?.action?.onClick?.invoke() },
                                         secondaryLabel = if (codexState == lytso.code.data.agent.codex.CodexState.CHECKING) null else "Server logs",
+                                        onSecondary = { showLocalServerOutputDialog = true }
+                                    )
+                                } else if (isAgyChat && agyNotInstalled) {
+                                    lytso.code.ui.agents.AgentSetupPrompt(
+                                        agent = lytso.code.domain.model.AgentKind.AGY,
+                                        title = "Antigravity is not installed",
+                                        message = agyEntry?.detail ?: "Antigravity (agy) is not installed yet.",
+                                        statusColor = agyEntry?.color,
+                                        actionLabel = agyEntry?.action?.label,
+                                        onAction = { agyEntry?.action?.onClick?.invoke() },
+                                        secondaryLabel = "Server logs",
                                         onSecondary = { showLocalServerOutputDialog = true }
                                     )
                                 } else when (if (isClaudeChat || isOpenCodeChat || isCodexChat) null else systemConnectionState.status) {
@@ -2895,7 +2924,8 @@ fun ChatScreen(
                         lytso.code.data.agent.claude.ClaudeStatus.NOT_INSTALLED -> "Claude Code is not installed. Set it up in Settings."
                         lytso.code.data.agent.claude.ClaudeStatus.BRIDGE_OUTDATED -> "Restart the local server to use Claude Code."
                         else -> "The local server is offline. Start it to send messages."
-                    } else "Server is offline. Start the server to send messages.",
+                    } else if (agyNotInstalled) "Antigravity (agy) is not installed. Install it in Settings → Antigravity → Account & CLI."
+                    else "Server is offline. Start the server to send messages.",
                     selectedModel = currentModel,
                     quota = currentQuota,
                     thinkingPreference = thinkingPref,
@@ -3109,6 +3139,10 @@ fun ChatScreen(
             onLogout = {
                 viewModel.logout()
             },
+            agyStatus = agyEntry,
+            agyAuth = agyAuthInfo,
+            onAgySignOut = { viewModel.logoutFromAgyHub() },
+            onAgyCancelSignIn = { viewModel.cancelAgyLogin() },
             onToggleModelEnabled = { modelId, isEnabled ->
                 viewModel.setModelEnabled(modelId, isEnabled)
             },
@@ -3276,17 +3310,21 @@ fun ChatScreen(
             claudeStatus = claudeStatus,
             onAgySignOut = { viewModel.logoutFromAgyHub() },
             onAgyCancelSignIn = { viewModel.cancelAgyLogin() },
+            onAgySettings = {
+                scope.launch { drawerState.close() }
+                requestedSettingsSection = lytso.code.ui.settings.SettingsSection.ANTIGRAVITY
+                showSettingsDialog = true
+            },
             onClaudeSignOut = { viewModel.claudeAccount.logout() },
             onClaudeSettings = {
                 scope.launch { drawerState.close() }
-                openClaudeSetup()
+                requestedSettingsSection = lytso.code.ui.settings.SettingsSection.CLAUDE
+                showSettingsDialog = true
             },
             onDismiss = { showAccountsDialog = false },
             openCode = openCodeEntry,
             openCodeFacts = listOfNotNull(
-                openCodeStatus?.version?.let { "OpenCode $it" },
-                openCodeConnected.takeIf { it.isNotEmpty() }?.let { if (it.size <= 2) it.joinToString(", ") else "${it.size} providers" },
-                openCodeModelCount.takeIf { it > 0 }?.let { "$it models" }
+                openCodeStatus?.version?.let { "CLI $it" }
             ),
             onOpenCodeSettings = {
                 scope.launch { drawerState.close() }
@@ -3297,8 +3335,7 @@ fun ChatScreen(
             codexEmail = codexAccount?.email,
             codexFacts = listOfNotNull(
                 codexAccount?.plan?.replaceFirstChar { it.uppercase() }?.let { "$it plan" },
-                codexStatus?.version?.let { "Codex $it" },
-                codexLimits?.primary?.let { "${it.usedPercent.toInt()}% of limit used" }
+                codexStatus?.version?.let { "CLI $it" }
             ),
             onCodexSignOut = { viewModel.codexBackend.logout() },
             onCodexSettings = {
@@ -3648,6 +3685,27 @@ fun ChatScreen(
             onDismiss = {
                 scope.launch {
                     viewModel.authPreferences.setHasSeenTerminalLauncherOnboarding(true)
+                }
+            }
+        )
+    }
+
+    // "Meet Gemmy": once the whole first-launch setup is done and the user is in chat, ask once whether to show the
+    // floating buddy (on by default, can be turned off right there). Gemmy itself only appears after this is answered.
+    val gemmyIntroDue = !hasSeenGemmyIntro && hasChosenAgents && !agentStepPending && !launcherStepPending &&
+        !isApplyingAgents && !isInFloatingWindow
+    var showGemmyIntro by remember { mutableStateOf(false) }
+    LaunchedEffect(gemmyIntroDue) {
+        if (gemmyIntroDue) delay(700) // let the chat settle after the setup steps
+        showGemmyIntro = gemmyIntroDue
+    }
+    if (showGemmyIntro && gemmyIntroDue) {
+        lytso.code.ui.onboarding.GemmyIntroDialog(
+            onConfirm = { enabled ->
+                showGemmyIntro = false
+                scope.launch {
+                    viewModel.authPreferences.setGemmyEnabled(enabled)
+                    viewModel.authPreferences.setHasSeenGemmyIntro(true)
                 }
             }
         )

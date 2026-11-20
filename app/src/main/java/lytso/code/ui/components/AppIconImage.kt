@@ -11,7 +11,8 @@ import androidx.compose.ui.res.painterResource
 import lytso.code.R
 
 /**
- * The real launcher icon (Prism), drawn from its adaptive-icon layers: the graphite background and the gem foreground.
+ * The real LytsoCoder launcher icon (Neon Rainbow emblem), drawn from its adaptive-icon layers: the obsidian rainbow-lit
+ * background and the glowing `>_` + spark orb foreground.
  * Both layers are 108 units with the visible part in the middle 72, so they are scaled 1.5x and clipped to this box.
  * Clip the caller's modifier to the shape you want (rounded square, circle).
  */

@@ -87,7 +87,7 @@ import lytso.code.data.daemon.IdeApiClient
 enum class SettingsSection(val title: String, val subtitle: String) {
     MAIN("Settings & Preferences", "Configure your LytsoCoder experience"),
     THEMES("Themes", "Light and dark mode, and the theme gallery"),
-    APPEARANCE("Appearance", "Chat text size, chat list, header icons and the app switcher"),
+    APPEARANCE("Appearance", "Chat text size, chat list, header icons, the app switcher and Gemmy"),
     STEM_RENDERING("STEM & diagrams", "Chemistry, graphs, geometry, simulations, circuits and offline Mermaid in chats"),
     SERVERS("Servers & Connectivity", "Configure AGY Hub and IDE Bridge endpoints"),
     CONNECT_PC("Connect to PC", "Use the agents on your PC (LytsoCoder in VS Code) from this phone"),
@@ -100,22 +100,23 @@ enum class SettingsSection(val title: String, val subtitle: String) {
     DATA_PROTECTION("Data Loss Protection", "Uninstall shield & App Info clear data protection"),
     PROJECT_CHECKPOINTS("Project checkpoints", "Go back to before any chat message: files restored with a preview"),
     COMMANDS("Commands & Permissions", "Auto-run policy, sandbox mode, and tool approvals"),
-    ANTIGRAVITY("Antigravity", "CLI, MCP servers, skills & plugins, commands & permissions"),
-    AGY_CLI("Antigravity CLI", "agy version and install, on this device or the server"),
+    ANTIGRAVITY("Antigravity", "Account & CLI, MCP servers, skills & plugins, commands & permissions"),
+    AGY_CLI("Account & CLI", "Google sign-in, agy version and install, on this device or the server"),
     AGY_CLOUD("Cloud agents", "Antigravity chats on a Google cloud machine (Remote Agents)"),
     CLAUDE("Claude Code", "Account, models, permissions, MCP, plugins & memory"),
     /** One Claude Code page (which one: the dialog's claudePage); not a page of its own for Jarvis. */
     CLAUDE_PAGE("Claude Code", "Account, models, permissions, MCP, plugins & memory"),
-    OPENCODE("OpenCode", "Server, providers, custom OpenAI-compatible endpoints & approvals"),
+    OPENCODE("OpenCode", "CLI, providers, custom OpenAI-compatible endpoints & approvals"),
     /** One OpenCode page (which one: the dialog's openCodePage). */
-    OPENCODE_PAGE("OpenCode", "Server, providers, endpoints, MCP & approvals"),
-    CODEX("Codex", "Account, usage limits, permissions, MCP, server & install"),
+    OPENCODE_PAGE("OpenCode", "CLI, providers, endpoints, MCP & approvals"),
+    CODEX("Codex", "Account & CLI, usage limits, permissions, MCP"),
     /** One Codex page (which one: the dialog's codexPage). */
-    CODEX_PAGE("Codex", "Account, usage limits, permissions, MCP, server & install"),
+    CODEX_PAGE("Codex", "Account & CLI, usage limits, permissions, MCP"),
     AGENTS("Agents", "Run Antigravity, Claude Code, OpenCode, Codex or several"),
     GLOBAL_CONTEXT("Global context", "What every chat is told about this app, and your own instructions"),
     AGENT_MEMORY("Agent memory & history", "Memories every agent keeps across chats, and past chats they can look up"),
     AGENT_HISTORY("Saved chats", "The chat history the agents can look up: read, edit or remove it"),
+    EGM("EGM · Elephant-Goldfish", "Plan a design and have fresh reviewers attack it before any code (/egm)"),
     JARVIS("Jarvis", "Hands-free voice control of the whole app"),
     JARVIS_AGENT("Jarvis · Agent", "Which agent and model Jarvis talks to"),
     JARVIS_PERSONALITY("Jarvis · Personality & you", "How Jarvis speaks, and what it should know about you"),
@@ -164,7 +165,7 @@ enum class SettingsSection(val title: String, val subtitle: String) {
         CODEX_PAGE -> CODEX
         TERMUX_API, X11_DESKTOP -> TERMUX_SUPPORT
         REA_GROUPS -> REA
-        GLOBAL_CONTEXT, AGENT_MEMORY -> AGENTS
+        GLOBAL_CONTEXT, AGENT_MEMORY, EGM -> AGENTS
         AGENT_HISTORY -> AGENT_MEMORY
         CHANGELOG -> ABOUT
         else -> if (jarvisPage != null) JARVIS else MAIN
@@ -297,11 +298,16 @@ fun SettingsDialog(
     claude: lytso.code.ui.claude.ClaudeSettingsDeps? = null,
     initialClaudePage: lytso.code.ui.claude.ClaudeSettingsPage? = null,
     openCode: lytso.code.data.agent.opencode.OpenCodeChatBackend? = null,
-    /** Opens on this OpenCode page (e.g. Server & install from an Install button). */
+    /** Opens on this OpenCode page (e.g. OpenCode CLI from an Install button). */
     initialOpenCodePage: lytso.code.ui.opencode.OpenCodeSettingsPage? = null,
     codex: lytso.code.data.agent.codex.CodexChatBackend? = null,
-    /** Opens on this Codex page (e.g. Server & install from an Install button). */
+    /** Opens on this Codex page (e.g. Account & CLI from an Install button). */
     initialCodexPage: lytso.code.ui.codex.CodexSettingsPage? = null,
+    /** Antigravity's status and Google account, for its Account & CLI page (null: Antigravity is off). */
+    agyStatus: lytso.code.ui.agents.AgentStatusEntry? = null,
+    agyAuth: lytso.code.data.remote.AgyHubClient.AgyAuthInfo = lytso.code.data.remote.AgyHubClient.AgyAuthInfo(),
+    onAgySignOut: () -> Unit = {},
+    onAgyCancelSignIn: () -> Unit = {},
     /** Opens on this page (e.g. Jarvis asked to show it); also switches to it while the dialog is open. */
     initialSection: SettingsSection? = null,
     enabledAgents: Set<lytso.code.domain.model.AgentKind> = setOf(lytso.code.domain.model.AgentKind.AGY),
@@ -636,9 +642,11 @@ fun SettingsDialog(
                         isApplying = isApplyingAgents,
                         onApply = onApplyAgents,
                         onOpenGlobalContext = { currentSection = SettingsSection.GLOBAL_CONTEXT },
-                        onOpenAgentMemory = { currentSection = SettingsSection.AGENT_MEMORY }
+                        onOpenAgentMemory = { currentSection = SettingsSection.AGENT_MEMORY },
+                        onOpenEgm = { currentSection = SettingsSection.EGM }
                     )
                     SettingsSection.GLOBAL_CONTEXT -> GlobalContextScreen()
+                    SettingsSection.EGM -> EgmScreen(cardBg = cardBg, cardBorder = cardBorder)
                     SettingsSection.AGENT_MEMORY -> AgentMemoryScreen(onOpenHistory = { currentSection = SettingsSection.AGENT_HISTORY })
                     SettingsSection.AGENT_HISTORY -> AgentHistoryScreen()
                     SettingsSection.STEM_RENDERING -> StemRenderingScreen()
@@ -664,9 +672,12 @@ fun SettingsDialog(
                         onNavigate = { currentSection = it }
                     )
                     SettingsSection.AGY_CLI -> Column(
-                        Modifier.fillMaxSize().bouncyVerticalScroll(rememberScrollState()).padding(16.dp)
+                        Modifier.fillMaxSize().bouncyVerticalScroll(rememberScrollState()).padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         lytso.code.ui.agents.AgyCliCard()
+                        lytso.code.ui.agents.AgyAccountCard(agyStatus, agyAuth, onAgySignOut, onAgyCancelSignIn)
+                        lytso.code.ui.agents.AgyAccountsCard(agyStatus, agyAuth)
                     }
                     SettingsSection.AGY_CLOUD -> Column(
                         Modifier.fillMaxSize().bouncyVerticalScroll(rememberScrollState()).padding(16.dp)
@@ -1076,6 +1087,8 @@ private fun rememberReaRow(onNavigate: (SettingsSection) -> Unit): SettingsRowIt
 /** The Android Development row of the main settings page, with the setup state. */
 @Composable
 private fun rememberAndroidDevRow(onNavigate: (SettingsSection) -> Unit): SettingsRowItem? {
+    // its setup (arm64 aapt2, rebuilt NDK, qemu for x86-only tools) is for arm64 phones only: hidden in the x86_64 build
+    if (lytso.code.BuildConfig.TARGET_ABI == "x86_64") return null
     val context = LocalContext.current
     LaunchedEffect(Unit) {
         lytso.code.data.androiddev.AndroidDevManager.init(context)
@@ -1886,6 +1899,58 @@ private fun AppearanceSubScreen(
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Reset Screen Position to Right-Center", fontSize = 12.sp)
                 }
+            }
+        }
+
+        // Gemmy: the floating cartoon buddy (on by default; first offered by the one-time "Meet Gemmy" dialog)
+        val gemmyContext = LocalContext.current
+        val gemmyPrefs = remember(gemmyContext) { lytso.code.data.preferences.AuthPreferences(gemmyContext) }
+        val isGemmyEnabled by gemmyPrefs.isGemmyEnabled.collectAsState(initial = true)
+        val gemmyScope = rememberCoroutineScope()
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = cardBg,
+            border = cardBorder,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                lytso.code.ui.components.GemmyPreview(
+                    zoom = 0.85f,
+                    modifier = Modifier.alpha(if (isGemmyEnabled) 1f else 0.4f)
+                )
+                Column(modifier = Modifier.weight(1f).padding(start = 4.dp, end = 12.dp)) {
+                    Text(
+                        text = "Gemmy",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "A floating cartoon buddy across the app: drag or fling it, tap, double-tap or long-press it. " +
+                            "It reacts while the agent works and rests (almost no battery) when left alone.",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+                Switch(
+                    checked = isGemmyEnabled,
+                    onCheckedChange = { enable ->
+                        gemmyScope.launch {
+                            gemmyPrefs.setGemmyEnabled(enable)
+                            gemmyPrefs.setHasSeenGemmyIntro(true) // decided here: no need for the intro dialog anymore
+                        }
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = ClaudeTerracotta
+                    )
+                )
             }
         }
 

@@ -1310,7 +1310,10 @@ fun ChatInputBar(
                                 }
                             }
                         } else if (canSend) {
-                            val sendBtnColor = if (!isAuth) lytso.code.theme.AppColors.textSecondary else if (!isOnline) lytso.code.theme.AppColors.textSecondary else if (attachmentsBusy) lytso.code.theme.AppColors.textSecondary else if (isBackgroundActive) lytso.code.theme.AppColors.warning else ClaudeTerracotta
+                            // can't send yet (signed out, offline, attachments loading): the same faint circle as the inactive
+                            // Send, so the arrow (textSecondary) stays visible; it used to be textSecondary on textSecondary
+                            val sendBlocked = !isAuth || !isOnline || attachmentsBusy
+                            val sendBtnColor = if (sendBlocked) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f) else if (isBackgroundActive) lytso.code.theme.AppColors.warning else ClaudeTerracotta
                             Surface(
                                 onClick = {
                                     val trimmed = textFieldState.text.toString().trim()
@@ -1340,7 +1343,7 @@ fun ChatInputBar(
                                     Icon(
                                         imageVector = Icons.Default.ArrowUpward,
                                         contentDescription = "Send",
-                                        tint = if (isAuth && isOnline) (if (isBackgroundActive) lytso.code.theme.AppColors.onBackground else Color.White) else lytso.code.theme.AppColors.textSecondary,
+                                        tint = if (sendBlocked) lytso.code.theme.AppColors.textSecondary else if (isBackgroundActive) lytso.code.theme.AppColors.onBackground else Color.White,
                                         modifier = Modifier.size(19.dp)
                                     )
                                 }

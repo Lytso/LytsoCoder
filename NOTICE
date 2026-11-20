@@ -61,6 +61,20 @@ Summary of notable modifications in 2026:
   - 2026-11-20: Added this NOTICE document, updated README legal
     disclosures, and created an original LytsoCoder vector emblem
     (`docs/readme/lytsocoder-icon.svg`).
+  - 2026-11-20: Synchronized with upstream `Santoshkurmi/antigem@c9981af`
+    (`standalone`): added x86_64 target ABI build pipeline (`-Pabi=x86_64`,
+    NDK clang CGO bridge build, `glibc-min-x86_64.tar.xz`, seccomp syscall
+    rewrite shim, Linux x64 `agy` launcher), multi-account AGY switcher
+    and filesystem watcher (`/api/agy/accounts`), Elephant-Goldfish Method
+    (`EGM` `/egm`, `/egm-lite`, `/egm-review`), Gemmy floating mascot &
+    preferences, PinnedChats drawer grouping, HubManager stability fixes,
+    and Compose BOM `2026.11.01` update — while preserving all `lytso.code`
+    isolation, Enhanced Conversation & Context Control, Android 11+
+    seccomp-safe process control (`pkg/procutil`), and zero-telemetry guarantees.
+  - 2026-11-20: Replaced the launcher icon, in-app `AppIconImage`, Android 12+
+    splash animation, and README emblem with the Neon Rainbow LytsoCoder
+    artwork (`docs/readme/lytsocoder-icon.svg`, `ic_launcher_background.xml`,
+    `ic_launcher_foreground.xml`, `splash_prism_animated.xml`).
 
 ------------------------------------------------------------------
 3. CORRESPONDING SOURCE AVAILABILITY (GNU GPLv3 Section 6)

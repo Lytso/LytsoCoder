@@ -73,7 +73,8 @@ fun FullScreenLocalToolsInstaller(
         }
     }
 
-    var selectedSourceType by remember { mutableStateOf(0) } // 0: Auto GitHub, 1: Base minimum, 2: Local ZIP File
+    // 0: Auto GitHub, 1: Base minimum, 2: Local ZIP File
+    var selectedSourceType by remember { mutableStateOf(0) }
     var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
     var showLogs by remember { mutableStateOf(false) }
     var selectedMirror by remember { mutableStateOf(RootfsMirror.GITHUB) }
@@ -251,7 +252,7 @@ fun FullScreenLocalToolsInstaller(
                     is LocalInstallerState.Idle -> {
                         PrimaryButton(
                             text = when (selectedSourceType) {
-                                0 -> "Install (~360 MB)"
+                                0 -> "Install (${LocalEnvironmentManager.ROOTFS_SIZE_LABEL})"
                                 1 -> "Install minimal (~33 MB)"
                                 else -> if (selectedFileUri != null) "Install from ZIP" else "Choose a ZIP file"
                             },
@@ -454,7 +455,7 @@ private fun SourcePicker(
         SourceOption(
             icon = Icons.Outlined.CloudDownload,
             title = "Full environment",
-            tag = "Recommended · ~360 MB",
+            tag = "Recommended · ${LocalEnvironmentManager.ROOTFS_SIZE_LABEL}",
             description = "Verified rootfs with the tools and environment preconfigured.",
             selected = selected == 0,
             onClick = { onSelect(0) }
@@ -515,7 +516,7 @@ private fun SourcePicker(
 private fun MirrorChooser(selected: RootfsMirror, onSelect: (RootfsMirror) -> Unit) {
     val uriHandler = LocalUriHandler.current
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        RootfsMirror.values().forEach { mirror ->
+        LocalEnvironmentManager.ROOTFS_MIRRORS.forEach { mirror ->
             val isSelected = mirror == selected
             Surface(
                 onClick = { onSelect(mirror) },

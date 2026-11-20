@@ -188,12 +188,83 @@ fun AgyCliCard(modifier: Modifier = Modifier) {
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                "Installed with Google's official installer (antigravity.google/cli/install.sh) into ~/.local/bin on " +
-                    (if (remote) "the server" else "this device") + ". agy updates itself when you run it in a terminal; " +
-                    "Check for updates runs `agy update` and, when a newer agy was installed, restarts the server so it is used " +
-                    "(voice calls need agy 1.5 or newer).",
+                // x86_64 build on this device: the bridge installs agy's Linux build behind a launcher (hub/agy_linux_build.go)
+                if (!remote && lytso.code.BuildConfig.TARGET_ABI == "x86_64")
+                    "Google has no Android build of agy for x86_64, so its Linux x64 build is installed into ~/.local/bin " +
+                        "and runs through the app's glibc. Its own updater is off; Check for updates installs Google's newest " +
+                        "Linux x64 release and, when it is newer, restarts the server so it is used " +
+                        "(voice calls need agy 1.5 or newer)."
+                else
+                    "Installed with Google's official installer (antigravity.google/cli/install.sh) into ~/.local/bin on " +
+                        (if (remote) "the server" else "this device") + ". agy updates itself when you run it in a terminal; " +
+                        "Check for updates runs `agy update` and, when a newer agy was installed, restarts the server so it is used " +
+                        "(voice calls need agy 1.5 or newer).",
                 fontSize = 11.sp, color = subtle
             )
+        }
+    }
+}
+
+/**
+ * Settings > Antigravity > Account & CLI: the Google account Antigravity uses, under the CLI card (like Claude Code's
+ * Account & CLI). [entry] is Antigravity's status (sign-in, signing in, errors) with its action; null: not known yet.
+ */
+@Composable
+fun AgyAccountCard(
+    entry: AgentStatusEntry?,
+    auth: lytso.code.data.remote.AgyHubClient.AgyAuthInfo,
+    onSignOut: () -> Unit,
+    onCancelSignIn: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val cli by BridgeInfo.agyCli.collectAsState()
+    val subtle = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text("Account", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Spacer(Modifier.height(6.dp))
+            when {
+                entry == null -> Text("Checking…", fontSize = 12.5.sp, color = subtle)
+                cli?.installed == false -> Text("Install agy above, then sign in here with Google.", fontSize = 12.5.sp, color = subtle)
+                entry.isReady -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(auth.displayName.ifBlank { auth.email.ifBlank { "Signed in" } }, fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp)
+                        listOf(auth.email.takeIf { it != auth.displayName }.orEmpty(), auth.userTier.ifBlank { auth.planName })
+                            .filter { it.isNotBlank() }.joinToString(" · ").takeIf { it.isNotBlank() }
+                            ?.let { Text(it, fontSize = 12.sp, color = subtle) }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = onSignOut) { Text("Sign out", color = MaterialTheme.colorScheme.error) }
+                }
+                entry.isSignedOut -> {
+                    Text("Sign in with Google to chat with Antigravity.", fontSize = 12.5.sp, color = subtle)
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = { entry.action?.onClick?.invoke() }) { Text("Sign in with Google") }
+                }
+                // signing in: Check (the browser sign-in finished) or Cancel
+                entry.pending && entry.action != null -> {
+                    entry.detail?.let { Text(it, fontSize = 12.5.sp, color = subtle) }
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // tapped: shows "Checking…" until the sign-in state changes (agy needs a few seconds after the browser)
+                        var checking by remember(entry.label) { mutableStateOf(false) }
+                        Button(enabled = !checking, onClick = { checking = true; entry.action.onClick() }) {
+                            Text(if (checking) "Checking…" else entry.action.label)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(onClick = onCancelSignIn) { Text("Cancel") }
+                    }
+                }
+                else -> {
+                    Text(entry.label, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = entry.color)
+                    entry.detail?.let { Text(it, fontSize = 12.sp, color = subtle, maxLines = 4) }
+                    Text("Sign-in is available once Antigravity is running.", fontSize = 11.5.sp, color = subtle, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/readme/lytsocoder-icon.svg" alt="LytsoCoder app emblem" width="112">
+<img src="docs/readme/lytsocoder-icon.svg" alt="LytsoCoder Neon Rainbow app emblem" width="112">
 
 # LytsoCoder
 
@@ -55,6 +55,8 @@ You can enable or disable each agent independently during onboarding or in **Set
 - Live streaming replies, collapsible thinking blocks, inline diffs, subagent tracking, tool approvals, plan approvals, and structured multiple-choice questions (`ask_question`).
 - Mid-chat switching for model, reasoning effort, thinking budget, and permission mode.
 - **OpenCode & Claude Code BYO Endpoints**: Presets and custom base URLs for OpenRouter, Moonshot/Kimi, DeepSeek, Z.ai (GLM), Ollama, LM Studio, or any OpenAI/Anthropic-compatible server.
+- **Multi-Account AGY Switcher & Live Watcher**: Manage and switch multiple saved `agy` accounts cleanly without restarting the app.
+- **Elephant-Goldfish Method (`EGM`) & Gemmy**: Built-in `/egm`, `/egm-lite`, and `/egm-review` adversarial planning workflows, pinned chats drawer section, and optional **Gemmy** floating companion.
 - Image/file attachments, voice dictation, STEM/LaTeX/Mermaid/TikZJax rendering, floating bubble, and **Jarvis** hands-free control ([docs/jarvis.md](docs/jarvis.md)).
 
 ### Built-in MCP Servers
@@ -72,7 +74,7 @@ Toggleable per preset in **Settings → MCP Servers**:
 | **REA** | Isolated Ubuntu proot environment for mobile binary/app inspection tasks. |
 
 ### Terminal, Editor, Browser & Server Mode
-- **Linux Environment**: Native `aarch64` Termux-based shell (`apt`/`pkg`, bash, zsh, Python, Node.js, Git, Go) without proot slowdown, optional standalone terminal launcher, **ADB Connect**, and **X11 Desktop** support.
+- **Linux Environment (`aarch64` & `x86_64`)**: Native Termux-based shell (`apt`/`pkg`, bash, zsh, Python, Node.js, Git, Go) without proot slowdown, per-ABI glibc runtime (with `x86_64` seccomp syscall shim), optional standalone terminal launcher, **ADB Connect**, and **X11 Desktop** support.
 - **Code Editor & Git**: Sora Editor with TextMate grammars, multi-tab workspace, file tree, diff viewer, and Git/GitHub CLI tooling.
 - **Browser & Mini Apps**: Embedded preview browser with DevTools and sandboxed HTML/JS/CSS Mini Apps.
 - **Remote PC / VPS Mode**: Connect over SSH/Wi-Fi or run `agy_ide_bridge` on an external Linux host ([docs/remote-server.md](docs/remote-server.md)).
@@ -82,20 +84,23 @@ Toggleable per preset in **Settings → MCP Servers**:
 
 ## Building from Source
 
-**Requirements:** JDK 21+, Android SDK (Compile SDK 36), and Go 1.26+.
+**Requirements:** JDK 21+, Android SDK (Compile SDK 37.1, NDK), and Go 1.26+.
 
 ```bash
 git clone --recursive https://github.com/Lytso/LytsoCoder.git
 cd LytsoCoder
 
-# 1. Run Go bridge unit tests (including seccomp-safe procutil, brainctl, and hub pause/restart tests)
+# 1. Sync bridge version metadata and run Go bridge unit tests (seccomp-safe procutil, brainctl, hub pause/restart)
+cp version.json agy_ide_bridge/pkg/buildinfo/version.json
 cd agy_ide_bridge && go test ./... && cd ..
 
-# 2. Run Android unit tests and compile Debug APK (includes embedded Go bridge binary)
+# 2. Run Android unit tests and compile Debug APKs (includes embedded Go bridge binary)
 ./gradlew :app:testDebugUnitTest :app:assembleDebug
+# Optional x86_64 build:
+./gradlew :app:assembleDebug -Pabi=x86_64
 
-# 3. Package APK artifacts into output/
-./scripts/build_all_apks.sh
+# 3. Package APK artifacts into output/ (add --x86_64 to include x86_64 APKs)
+./scripts/build_all_apks.sh --x86_64
 ```
 
 To build reproducible `rootfs-v2` or offline STEM `render-v1` archives independently from upstream open manifests:
@@ -146,9 +151,9 @@ LytsoCoder is free software released under the terms of the **GNU General Public
 
 ### 2. Upstream Provenance & Modification Notice (GPLv3 §§ 4 & 5)
 In strict compliance with GNU GPLv3 Sections 4 and 5:
-- **Upstream Work:** LytsoCoder is a modified derivative fork of [`Santoshkurmi/antigem`](https://github.com/Santoshkurmi/antigem).
+- **Upstream Work:** LytsoCoder is a modified derivative fork of [`Santoshkurmi/antigem`](https://github.com/Santoshkurmi/antigem) (synchronized up to `c9981af` on `standalone`).
 - **Preserved Upstream Copyright:** `Copyright (C) 2026 Santosh Kurmi` — Licensed under GNU GPL v3.0 or later.
-- **Modifications Notice:** Original additions and modifications are `Copyright (C) 2026 @ItsLytso` (likewise licensed under GNU GPL v3.0 or later), dated **2026-11-20** in [NOTICE](NOTICE) and recorded in commit history (`lytso.code` rebrand & isolation, telemetry removal, independent rootfs/render asset builders, Enhanced Conversation & Context Control, and Android 11+ seccomp-BPF compatibility fixes).
+- **Modifications Notice:** Original additions and modifications are `Copyright (C) 2026 @ItsLytso` (likewise licensed under GNU GPL v3.0 or later), dated **2026-11-20** in [NOTICE](NOTICE) and recorded in commit history (`lytso.code` rebrand & isolation, telemetry removal, independent rootfs/render asset builders, Enhanced Conversation & Context Control, Android 11+ seccomp-BPF compatibility fixes, and original Neon Rainbow LytsoCoder emblem/launcher artwork).
 
 ### 3. Corresponding Source Availability (GPLv3 § 6)
 The complete corresponding source code for LytsoCoder (Android application, Go bridge, submodules, and build scripts) is publicly hosted at [`https://github.com/Lytso/LytsoCoder`](https://github.com/Lytso/LytsoCoder). Source code for upstream Termux userland packages referenced by the optional rootfs builder is maintained by Termux at [`https://github.com/termux/termux-packages`](https://github.com/termux/termux-packages).

@@ -102,7 +102,8 @@ object TermuxRelocation {
         root: File,
         newPackage: String,
         onProgress: ((Int) -> Unit)? = null,
-        pathsOnly: Boolean = false
+        pathsOnly: Boolean = false,
+        @Suppress("UNUSED_PARAMETER") releasePaths: Boolean = false
     ): Stats {
         val new = newPackage.toByteArray(Charsets.US_ASCII)
         require(new.size == TERMUX_PACKAGE.length) { "$newPackage must have the length of $TERMUX_PACKAGE" }

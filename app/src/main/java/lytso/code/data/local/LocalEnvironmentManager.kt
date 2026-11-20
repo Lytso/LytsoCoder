@@ -69,10 +69,16 @@ object LocalEnvironmentManager {
     // Minimum 10 MB required for a real Termux bootstrap archive
     private const val MIN_BOOTSTRAP_SIZE_BYTES = 10 * 1024 * 1024L
 
-    const val HARDCODED_ROOTFS_URL = "https://github.com/Lytso/LytsoCoder/releases/download/rootfs-v2/lytsocoder-rootfs-aarch64.zip"
+    /** The full rootfs is per CPU: arm64 and x86_64, both in rootfs-v2. */
+    private val IS_X86_64: Boolean = lytso.code.BuildConfig.TARGET_ABI == "x86_64"
     const val HARDCODED_ROOTFS_TAG = "rootfs-v2"
-    const val HARDCODED_ROOTFS_ASSET = "lytsocoder-rootfs-aarch64.zip"
-    const val HARDCODED_ROOTFS_SIZE_BYTES = 377_158_262L
+    val HARDCODED_ROOTFS_ASSET: String = if (IS_X86_64) "lytsocoder-rootfs-x86_64.zip" else "lytsocoder-rootfs-aarch64.zip"
+    val HARDCODED_ROOTFS_URL: String = "https://github.com/Lytso/LytsoCoder/releases/download/$HARDCODED_ROOTFS_TAG/$HARDCODED_ROOTFS_ASSET"
+    val HARDCODED_ROOTFS_SIZE_BYTES: Long = if (IS_X86_64) 419_473_812L else 377_158_262L
+    /** The download size the installers show for "Full environment". */
+    val ROOTFS_SIZE_LABEL: String = if (IS_X86_64) "~400 MB" else "~360 MB"
+    /** Mirrors available in LytsoCoder builds. */
+    val ROOTFS_MIRRORS: List<RootfsMirror> = RootfsMirror.values().toList()
     // page where the user can download the same zip by hand (then install it with "From a ZIP file")
     const val GITHUB_ROOTFS_PAGE = "https://github.com/Lytso/LytsoCoder/releases/tag/rootfs-v2"
 
@@ -218,6 +224,11 @@ object LocalEnvironmentManager {
             val home = getHomeDir(context).absolutePath
             val bin = getBinDir(context)
             if (!bin.exists()) return
+            // x86_64: the seccomp shim (GLIBC_SIGSYS_SHIM); LD_AUDIT also reaches glibc programs Claude starts
+            val shimLine = GLIBC_SIGSYS_SHIM?.let {
+                "# x86_64: rewrites the syscalls Android blocks there for glibc programs (scripts/x86_64-glibc)\n" +
+                    "export LD_AUDIT=\"${'$'}GLIBC_LIB/$it\"\n"
+            } ?: ""
             val script = """
                 |#!$prefix/bin/bash
                 |# Claude Code launcher written by LytsoCoder on every start (edits are overwritten).
@@ -225,7 +236,7 @@ object LocalEnvironmentManager {
                 |# Claude's updater only changes ~/.local/share/claude/versions and ~/.local/bin/claude, never this file.
                 |VERSIONS_DIR="$home/.local/share/claude/versions"
                 |GLIBC_LIB="$prefix/glibc/lib"
-                |LOADER="${'$'}GLIBC_LIB/ld-linux-aarch64.so.1"
+                |LOADER="${'$'}GLIBC_LIB/$GLIBC_LOADER"
                 |TARGET=""
                 |if [ -d "${'$'}VERSIONS_DIR" ]; then
                 |    for v in ${'$'}(ls -1 "${'$'}VERSIONS_DIR" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+${'$'}' | sort -V -r); do
@@ -253,7 +264,7 @@ object LocalEnvironmentManager {
                 |fi
                 |# termux-exec is a bionic library: it must not be preloaded into the glibc process
                 |unset LD_PRELOAD
-                |exec "${'$'}LOADER" --library-path "${'$'}GLIBC_LIB" "${'$'}TARGET" "${'$'}@"
+                |${shimLine}exec "${'$'}LOADER" --library-path "${'$'}GLIBC_LIB" "${'$'}TARGET" "${'$'}@"
                 |""".trimMargin()
             val wrapper = getClaudeWrapperFile(context)
             if (!wrapper.exists() || isSymlink(wrapper) || wrapper.readText() != script) {
@@ -486,6 +497,17 @@ object LocalEnvironmentManager {
     /** A 32-bit-only phone (no 64-bit ABI): the local Linux environment cannot run on it. */
     fun isUnsupported32BitDevice(): Boolean = Build.SUPPORTED_64_BIT_ABIS.isNullOrEmpty()
 
+    /** The bundled glibc's loader, for the CPU this APK was built for (Gradle `-Pabi`, see app/build.gradle.kts). */
+    val GLIBC_LOADER: String =
+        if (lytso.code.BuildConfig.TARGET_ABI == "x86_64") "ld-linux-x86-64.so.2" else "ld-linux-aarch64.so.1"
+
+    /**
+     * x86_64 only, in the same bundle: Android's x86_64 seccomp filter blocks syscalls glibc programs use there (access,
+     * mkdir, rename…; arm64 has none of them), and this library, loaded with LD_AUDIT, rewrites them
+     * (scripts/x86_64-glibc). The bridge loads it into OpenCode and agy the same way.
+     */
+    val GLIBC_SIGSYS_SHIM: String? = if (lytso.code.BuildConfig.TARGET_ABI == "x86_64") "libantigem_sigsys.so" else null
+
     fun getBootstrapArch(): String {
         val abis = Build.SUPPORTED_ABIS ?: emptyArray()
         for (abi in abis) {
@@ -579,7 +601,7 @@ object LocalEnvironmentManager {
             assetName = HARDCODED_ROOTFS_ASSET,
             arch = getBootstrapArch(),
             sizeBytes = HARDCODED_ROOTFS_SIZE_BYTES,
-            sizeFormatted = "~360 MB",
+            sizeFormatted = ROOTFS_SIZE_LABEL,
             packageName = context.packageName
         )
         _installerState.value = LocalInstallerState.AwaitingConfirmation(info)
@@ -677,8 +699,9 @@ object LocalEnvironmentManager {
     suspend fun installLocalEnvironment(
         context: Context,
         authPreferences: AuthPreferences,
-        source: BootstrapSource = BootstrapSource.Auto
+        requestedSource: BootstrapSource = BootstrapSource.Auto
     ): Boolean = withContext(Dispatchers.IO) {
+        val source = requestedSource
         val appContext = context.applicationContext
         val prefixDir = getPrefixDir(appContext)
         val binDir = getBinDir(appContext)
@@ -1412,9 +1435,9 @@ object LocalEnvironmentManager {
                         progressFraction = 0.88f
                     )
                 }
-                val usr = TermuxRelocation.relocateTree(prefixDir, pkg, onProgress)
+                val usr = TermuxRelocation.relocateTree(prefixDir, pkg, onProgress, releasePaths = true)
                 // the home folder holds the user's own files: only paths there (see TermuxRelocation)
-                val home = TermuxRelocation.relocateTree(homeDir, pkg, onProgress, pathsOnly = true)
+                val home = TermuxRelocation.relocateTree(homeDir, pkg, onProgress, pathsOnly = true, releasePaths = true)
                 log("✓ Adapted ${usr.patchedFiles + home.patchedFiles} files and ${usr.links + home.links} symlinks (${usr.files + home.files} files checked)")
             }
 
@@ -1627,8 +1650,8 @@ object LocalEnvironmentManager {
 
     private fun extractGlibcMinAsset(context: Context, prefixDir: File): Boolean {
         log("Checking for bundled minimal Glibc runtime...")
-        // shipped xz-compressed: 4.3 MB -> 1.2 MB in the APK
-        val assetName = "glibc-min-arm64.tar.xz"
+        // shipped xz-compressed: 4.3 MB -> 1.2 MB in the APK; one per CPU (app/src/abi/<abi>/assets)
+        val assetName = "glibc-min-${lytso.code.BuildConfig.TARGET_ABI}.tar.xz"
         val inStream = try {
             context.assets.open(assetName)
         } catch (e: Exception) {
@@ -1692,9 +1715,10 @@ object LocalEnvironmentManager {
         val prefixDir = getPrefixDir(context)
         val glibcDir = File(prefixDir, "glibc")
         val glibcLib = File(glibcDir, "lib")
-        val ldLinux = File(glibcLib, "ld-linux-aarch64.so.1")
+        val ldLinux = File(glibcLib, GLIBC_LOADER)
 
-        if (!ldLinux.exists()) {
+        // an x86_64 install made before the shim was in the bundle gets it here
+        if (!ldLinux.exists() || GLIBC_SIGSYS_SHIM != null && !File(glibcLib, GLIBC_SIGSYS_SHIM).exists()) {
             extractGlibcMinAsset(context, prefixDir)
         }
 
@@ -1981,7 +2005,7 @@ object LocalEnvironmentManager {
         val bashrc = File(homeDir, ".bashrc")
         if (!bashrc.exists()) {
             bashrc.writeText(
-                """# Gemini Local Linux Environment
+                """# LytsoCoder Local Linux Environment
 export PREFIX="${prefixDir.absolutePath}"
 export HOME="${homeDir.absolutePath}"
 export PATH="${homeDir.absolutePath}/.local/bin:${binDir.absolutePath}:${binDir.absolutePath}/applets:/system/bin:/system/xbin"
@@ -2003,10 +2027,27 @@ alias cls='clear'
 alias proj='cd ${projectsDir.absolutePath}'
 
 # Termux styled color prompt
-PS1='\[\033[01;32m\]gemini\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+PS1='\[\033[01;32m\]lytsocoder\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
 """.trimIndent()
             )
             try { Os.chmod(bashrc.absolutePath, 420) } catch (_: Exception) {} // 0644
+        } else {
+            // the rootfs zip (a backup) may bring a .bashrc with an old prompt ("gemini" or "antigem"). Only that
+            // exact line changes; a prompt the user set stays
+            try {
+                val basePrompt = """PS1='\[\033[01;32m\]gemini\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '"""
+                val upstreamPrompt = basePrompt.replace("]gemini\\[", "]antigem\\[")
+                val targetPrompt = basePrompt.replace("]gemini\\[", "]lytsocoder\\[")
+                val text = bashrc.readText()
+                val updated = when {
+                    text.contains(basePrompt) -> text.replace(basePrompt, targetPrompt)
+                    text.contains(upstreamPrompt) -> text.replace(upstreamPrompt, targetPrompt)
+                    else -> text
+                }
+                if (updated != text) bashrc.writeText(updated)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not update the prompt in ${bashrc.absolutePath}: ${e.message}")
+            }
         }
 
         val profile = File(homeDir, ".profile")

@@ -1,13 +1,13 @@
 {
-  "version_code": 132,
-  "version_name": "2.0.1",
+  "version_code": 133,
+  "version_name": "2.0.2",
   "min_supported_version_code": 2,
   "changelog": [
-    "Rebranded to LytsoCoder (lytso.code / lytso.cdev) by @ItsLytso so it installs alongside AntiGem and Termux",
-    "Isolated local bridge, hub, and browser MCP ports (1240/1241/8770 release, 1242/1243/8771 debug)",
-    "Removed TelemetryDeck analytics SDK and unofficial-build notice",
-    "Updated in-app updater, release workflow, and repository links to Lytso/LytsoCoder",
-    "Kept Termux byte-for-byte relocation, rootfs-v2 mirrors, and backward-compatible chat/project import"
+    "Added x86_64 support for emulators and Chromebooks (-Pabi=x86_64, per-ABI glibc runtime, x86_64 seccomp shim, and Linux x64 agy launcher)",
+    "Synced multi-account Antigravity CLI login switcher, EGM (Elephant-Goldfish Model), Gemmy mascot, Pinned Chats, and Compose BOM 2026.11.01 keyboard crash fix",
+    "Redesigned LytsoCoder app emblem and animated splash with vivid Neon Rainbow glow",
+    "Kept Enhanced Conversation Control (editable context/system prompts, in-place message editing, thinking & artifact pruning, message branching)",
+    "Kept Android 11+ seccomp-safe Go bridge process management (pkg/procutil) and zero-disconnect brain sync"
   ],
   "is_critical": false
 }

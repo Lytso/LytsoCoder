@@ -137,6 +137,18 @@ class AgyChatBackend(
     init {
         // moving a model to another quota group, or switching the pill between 5h and 7d, updates the pill right away
         lytso.code.domain.model.ModelGroupPrefs.init(application)
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             combine(
                 lytso.code.domain.model.ModelGroupPrefs.overrides(lytso.code.domain.model.QuotaAgent.AGY),
@@ -157,6 +169,18 @@ class AgyChatBackend(
                 currentIds.remove(modelId)
             }
         }
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             authPrefs.saveEnabledModelIds(currentIds)
         }
@@ -164,6 +188,18 @@ class AgyChatBackend(
 
     fun enableAllModels() {
         val allIds = _availableModels.value.map { it.id }.toSet()
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             authPrefs.saveEnabledModelIds(allIds)
         }
@@ -269,8 +305,22 @@ class AgyChatBackend(
         checkAgyAuthStatus(userInitiated = false)
     }
 
-    fun checkAgyAuthStatus(userInitiated: Boolean = false) {
+    /** [accountChanged]: the agy login was swapped; quotas and models are reloaded for the new account. */
+    fun checkAgyAuthStatus(userInitiated: Boolean = false, accountChanged: Boolean = false) {
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
         backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
+        backendScope.launch {
+            val emailBefore = _agyAuthInfo.value.email.takeIf { _agyAuthInfo.value.isLoggedIn }
             // "Checking sign-in…" only while the sign-in state is unknown (or the user asked). A background re-check of
             // a confirmed sign-in stays silent: the status only changes if the answer differs (signed out).
             val alreadySignedIn = _agyAuthInfo.value.isLoggedIn && !_agyAuthInfo.value.isOffline
@@ -316,8 +366,10 @@ class AgyChatBackend(
                     loginPollJob?.cancel()
                     if (userInitiated) {
                         _authFeedbackMessage.tryEmit("Signed in as ${info.displayName.ifBlank { info.email }}")
+                    } else if (accountChanged && info.email.isNotBlank() && !info.email.equals(emailBefore, ignoreCase = true)) {
+                        _authFeedbackMessage.tryEmit("Antigravity now uses ${info.email}")
                     }
-                    refreshQuotas(force = false)
+                    refreshQuotas(force = accountChanged)
                 } else if (userInitiated) {
                     _authFeedbackMessage.tryEmit("Not signed in.")
                 }
@@ -382,6 +434,18 @@ class AgyChatBackend(
         agyBridgeService.updateAuthChecking(true)
         loginPollJob?.cancel()
 
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             val hubUrl = AuthPreferences.currentHubUrl
 
@@ -434,6 +498,18 @@ class AgyChatBackend(
         _isAuthBusy.value = true
         loginPollJob?.cancel()
 
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             val hubUrl = AuthPreferences.currentHubUrl
             try {
@@ -474,6 +550,18 @@ class AgyChatBackend(
     init {
         // A finished run used quota: when the last running chat (the open one or one in the background) stops,
         // fetch the quota numbers again so the model picker and the chat pill show what is left now.
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             combine(
                 _conversations.map { list -> list.any { it.isRunning } },
@@ -570,6 +658,18 @@ class AgyChatBackend(
     /** Starts hub monitoring, conversation sync and auth checks (formerly ChatViewModel.init). */
     fun start() {
         // 1. Hub status live monitoring via WebSocket
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             while (currentCoroutineContext().isActive) {
                 try {
@@ -632,6 +732,18 @@ class AgyChatBackend(
             }
         }
 
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             agyBridgeService.loginUrlEvents.collect { url ->
                 if (url.isNotBlank()) {
@@ -640,6 +752,18 @@ class AgyChatBackend(
                     if (!_isAuthBusy.value && !_agyAuthInfo.value.isLoggedIn) startLoginPoll(AuthPreferences.currentHubUrl)
                 }
             }
+        }
+
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
         }
 
         backendScope.launch {
@@ -658,6 +782,18 @@ class AgyChatBackend(
             }
         }
 
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             authPrefs.enabledModelIds.collect { ids ->
                 _enabledModelIds.value = ids
@@ -666,6 +802,18 @@ class AgyChatBackend(
         }
 
         // Keep active conversation title and summary live-synced when conversation list updates
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             _conversations.collect { convList ->
                 val activeId = _currentConversation.value?.id ?: return@collect
@@ -688,6 +836,18 @@ class AgyChatBackend(
         }
 
         // Periodic auto-reconnect monitor for Hub RPC streams & Bridge (every 20 seconds)
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             delay(20_000)
             while (currentCoroutineContext().isActive) {
@@ -707,6 +867,18 @@ class AgyChatBackend(
     }
 
     fun refreshActiveInstances() {
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             try {
                 val httpUrl = AuthPreferences.currentBridgeHttpUrl
@@ -721,6 +893,18 @@ class AgyChatBackend(
     }
 
     fun terminateInstance(conversationId: String) {
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             val httpUrl = AuthPreferences.currentBridgeHttpUrl
             val ok = agyBridgeService.terminateInstance(conversationId, httpUrl)
@@ -838,7 +1022,9 @@ class AgyChatBackend(
                             for (delId in update.removedIds) {
                                 if (delId != activeId || _messages.value.isEmpty()) {
                                     currentMap.remove(delId)
-                                    knownDaemonCascadeIds.remove(delId)
+                                    // the open chat stays known: one with only a voice call has no steps, so the hub lists
+                                    // it as empty, but it exists there and starting it again fails ("already exists")
+                                    if (delId != activeId) knownDaemonCascadeIds.remove(delId)
                                 }
                             }
 
@@ -951,6 +1137,18 @@ class AgyChatBackend(
         refreshQuotas()
         checkBridgeHealth()
         checkAgyAuthStatus()
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             lytso.code.data.daemon.IdeDaemonManager.checkHealthAndReconnect(isSilent = false)
         }
@@ -962,6 +1160,18 @@ class AgyChatBackend(
      */
     override fun onAppForegrounded() {
         android.util.Log.d("ChatViewModel", "App foregrounded: inspecting RPC streams...")
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             val conv = _currentConversation.value
             val isExistingConv = conv != null && conv.title != "New Chat" && _conversations.value.any { it.id == conv.id }
@@ -991,6 +1201,18 @@ class AgyChatBackend(
             } else ""
             _currentConversation.value = conv.copy(workspaceUri = uri)
         }
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             val httpUrl = AuthPreferences.currentBridgeHttpUrl
             val model = _selectedModelId.value.ifBlank { _availableModels.value.firstOrNull()?.id ?: "" }
@@ -1086,6 +1308,18 @@ class AgyChatBackend(
         _streamRun.value = null
         _queuedMessages.value = emptyList()
 
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             _conversationError.value = null
 
@@ -1125,6 +1359,9 @@ class AgyChatBackend(
         _currentConversation.value = conv.copy(cloudProjectId = projectId, workspaceUri = if (projectId != null) "" else conv.workspaceUri)
     }
 
+    /** startCascade failed only because the hub already has a chat with that id. */
+    private fun isAlreadyOnHub(err: String?): Boolean = err?.contains("already exists", ignoreCase = true) == true
+
     /** The `Model` number of the model picked for the chat on screen (0 = not known), for voice calls. */
     fun planModelNumber(): Int = runCatching {
         exa.language_server_pb.Model.valueOf(AgyHubClient.resolveModelEnum(_selectedModelId.value)).value
@@ -1146,7 +1383,8 @@ class AgyChatBackend(
         if (!onDaemon) {
             val modelEnum = AgyHubClient.resolveModelEnum(_selectedModelId.value)
             val ws = conv.workspaceUri.takeIf { it.isNotBlank() }?.let { if (it.startsWith("file://")) it else "file://$it" } ?: ""
-            agyHubClient.startCascade(cascadeId = id, modelEnum = modelEnum, workspaceUri = ws, cloudProjectId = conv.cloudProjectId).getOrThrow()
+            agyHubClient.startCascade(cascadeId = id, modelEnum = modelEnum, workspaceUri = ws, cloudProjectId = conv.cloudProjectId)
+                .exceptionOrNull()?.let { if (!isAlreadyOnHub(it.message)) throw it }
             knownDaemonCascadeIds.add(id)
             // no longer an unsaved "New Chat": the live stream may start (the hub names the chat later)
             val named = conv.copy(title = if (conv.title == "New Chat") "Voice chat" else conv.title, workspaceUri = ws)
@@ -1437,6 +1675,18 @@ class AgyChatBackend(
     }
 
     override fun deleteConversation(id: String) {
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             _conversations.value = _conversations.value.filter { it.id != id }
             knownDaemonCascadeIds.remove(id)
@@ -1459,6 +1709,18 @@ class AgyChatBackend(
         val oldTitle = _conversations.value.find { it.id == id }?.title
         _conversations.value = _conversations.value.map { if (it.id == id) it.copy(title = clean) else it }
         _currentConversation.value?.let { if (it.id == id) _currentConversation.value = it.copy(title = clean) }
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             agyHubClient.updateConversationTitle(id, clean, AuthPreferences.currentHubUrl).onFailure { e ->
                 Log.w("AgyChatBackend", "rename failed: ${e.message}")
@@ -1479,6 +1741,18 @@ class AgyChatBackend(
         if (before == archived) return
         _conversations.value = _conversations.value.map { if (it.id == id) it.copy(archived = archived) else it }
         _currentConversation.value?.let { if (it.id == id) _currentConversation.value = it.copy(archived = archived) }
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             agyHubClient.setConversationArchived(id, archived, AuthPreferences.currentHubUrl).onFailure { e ->
                 Log.w("AgyChatBackend", "archive failed: ${e.message}")
@@ -1494,6 +1768,18 @@ class AgyChatBackend(
     override fun forkConversation(id: String) = forkConversationAt(id, forkAtStepIndex = null)
 
     fun forkConversationAt(id: String, forkAtStepIndex: Int?) {
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             _isLoadingConversation.value = true
             _conversationError.value = null
@@ -1771,6 +2057,18 @@ class AgyChatBackend(
         val modelObj = _availableModels.value.find { it.id == modelId || it.key == modelId }
         val modelKey = modelObj?.key ?: ""
         val modelName = modelObj?.displayName ?: ""
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             authPrefs.savePreferredModel(modelId = modelId, modelKey = modelKey, displayName = modelName)
         }
@@ -1848,6 +2146,18 @@ class AgyChatBackend(
             updatedList = trajectoryEngine.toChatMessages(conv.id)
             _messages.value = updatedList
             lytso.code.ui.chat.ChatFeedCache.prewarm(updatedList)
+        }
+
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
         }
 
         backendScope.launch {
@@ -2004,6 +2314,18 @@ class AgyChatBackend(
             onError("Audio file empty or not found")
             return
         }
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             isTranscribingAudio.value = true
             try {
@@ -2043,14 +2365,38 @@ class AgyChatBackend(
             // Truncate following assistant responses and re-stream
             val truncated = current.take(index + 1)
             _messages.value = truncated
-            backendScope.launch {
+            // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
+        backendScope.launch {
                 executeStream(conv, truncated)
             }
         } else {
             // Assistant response retry: truncate this response and re-execute
             val truncated = current.take(index)
             _messages.value = truncated
-            backendScope.launch {
+            // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
+        backendScope.launch {
                 executeStream(conv, truncated)
             }
         }
@@ -2526,7 +2872,19 @@ class AgyChatBackend(
         clearOptimisticSend()
 
         if (conv != null) {
-            backendScope.launch {
+            // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
+        backendScope.launch {
                 val hubUrl = AuthPreferences.currentHubUrl
                 agyHubClient.cancelCascadeInvocation(conv.id, hubUrl)
             }
@@ -2558,6 +2916,18 @@ class AgyChatBackend(
     }
 
     fun refreshQuotas(force: Boolean = true, showToastFeedback: Boolean = false) {
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             _isRefreshingModels.value = true
             var failureError: String? = null
@@ -2661,6 +3031,18 @@ class AgyChatBackend(
         trajectoryEngine.optimisticUpdateStepStatus(stepIndex, lytso.code.data.remote.dto.CortexStepStatuses.RUNNING)
         _messages.value = trajectoryEngine.toChatMessages(conv.id)
 
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             val hubUrl = AuthPreferences.currentHubUrl
             val resolvedScope = scope ?: authPrefs.defaultApprovalScope.firstOrNull() ?: "PERMISSION_SCOPE_ONCE"
@@ -2700,6 +3082,18 @@ class AgyChatBackend(
         trajectoryEngine.optimisticUpdateStepStatus(stepIndex, lytso.code.data.remote.dto.CortexStepStatuses.CANCELED, output = denyInstruction)
         _messages.value = trajectoryEngine.toChatMessages(conv.id)
         _isStreaming.value = false
+
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
 
         backendScope.launch {
             val hubUrl = AuthPreferences.currentHubUrl
@@ -2751,6 +3145,18 @@ class AgyChatBackend(
         )
         _messages.value = trajectoryEngine.toChatMessages(conv.id)
 
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             val hubUrl = AuthPreferences.currentHubUrl
             val res = agyHubClient.cancelCascadeSteps(
@@ -2769,6 +3175,18 @@ class AgyChatBackend(
         _terminatedToolDialog.value = null
         val conv = _currentConversation.value ?: return
         val msg = _messages.value.find { it.id == messageId } ?: return
+
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
 
         backendScope.launch {
             val currentHistory = _messages.value.filter { it.id != messageId }
@@ -2832,6 +3250,18 @@ class AgyChatBackend(
             )
         }
 
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             val hubUrl = AuthPreferences.currentHubUrl
             if (stepIndex != null) {
@@ -2883,6 +3313,18 @@ class AgyChatBackend(
                 toolCalls = updatedToolCalls,
                 isStreaming = true
             )
+        }
+
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
         }
 
         backendScope.launch {
@@ -2948,6 +3390,18 @@ class AgyChatBackend(
             )
         }
 
+        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
+        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
+        backendScope.launch {
+            agyBridgeService.agyAccountEvents.collectLatest {
+                delay(300)
+                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
+            }
+        }
+        lytso.code.data.remote.AgyAccounts.replyRunning = {
+            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
+        }
+
         backendScope.launch {
             val res = agyHubClient.cancelCascadeInvocation(conv.id, hubUrl)
             if (res.isFailure) {
@@ -2981,5 +3435,7 @@ class AgyChatBackend(
     fun dispose() {
         persistentStreamJob?.cancel()
         streamingJob?.cancel()
+        // the singleton must not keep this backend (and its ViewModel) alive
+        lytso.code.data.remote.AgyAccounts.replyRunning = { false }
     }
 }

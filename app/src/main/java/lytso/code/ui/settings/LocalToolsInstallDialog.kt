@@ -65,7 +65,8 @@ fun LocalToolsInstallDialog(
         }
     }
 
-    var selectedSourceType by remember { mutableStateOf(0) } // 0: Auto GitHub, 1: Direct URL, 2: Local ZIP File
+    // 0: Auto GitHub, 1: Direct URL, 2: Local ZIP File
+    var selectedSourceType by remember { mutableStateOf(0) }
     var directUrlText by remember { mutableStateOf("") }
     var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
 
@@ -341,7 +342,7 @@ fun LocalToolsInstallDialog(
                                             }
                                         }
                                         Text(
-                                            text = "Auto-downloads verified LytsoCoder rootfs (~360 MB) with preconfigured tools and environment",
+                                            text = "Auto-downloads verified LytsoCoder rootfs (${LocalEnvironmentManager.ROOTFS_SIZE_LABEL}) with preconfigured tools and environment",
                                             fontSize = 11.5.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
