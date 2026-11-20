@@ -48,8 +48,17 @@ func TestEditMessageNonDestructiveUserAndAssistant(t *testing.T) {
 	if len(hist) != 3 {
 		t.Fatalf("expected all 3 messages preserved, got %d", len(hist))
 	}
-	if !strings.Contains(string(hist[0]), `CTX\n</lytsocoder-expansion>edited first prompt`) {
-		t.Fatalf("expected hidden context preserved in u1, got: %s", string(hist[0]))
+	var u1 struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(hist[0], &u1); err != nil {
+		t.Fatalf("unmarshal u1: %v", err)
+	}
+	wantU1 := "<lytsocoder-expansion command=\"\">\nCTX\n</lytsocoder-expansion>edited first prompt"
+	if u1.Message.Content != wantU1 {
+		t.Fatalf("expected hidden context preserved in u1: got %q want %q", u1.Message.Content, wantU1)
 	}
 	if !strings.Contains(string(hist[1]), "step think") || !strings.Contains(string(hist[1]), "edited reply") {
 		t.Fatalf("expected thinking preserved and text edited in a1, got: %s", string(hist[1]))

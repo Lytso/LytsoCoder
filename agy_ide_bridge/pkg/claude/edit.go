@@ -2,6 +2,7 @@ package claude
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -10,6 +11,16 @@ import (
 
 	"gemini-server/pkg/brainctl"
 )
+
+func marshalJSONLiteral(v interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
+}
 
 // EditMessage updates a user or assistant message in place inside the Claude JSONL transcript
 // without discarding subsequent messages or conversation history.
@@ -49,7 +60,7 @@ func (m *Manager) EditMessage(id, targetUUID, newText string, preserveHidden boo
 					if err := rewriteEntryText(obj, newText, preserveHidden); err != nil {
 						return err
 					}
-					if b, err := json.Marshal(obj); err == nil {
+					if b, err := marshalJSONLiteral(obj); err == nil {
 						out.Write(b)
 						out.WriteByte('\n')
 						found = true
@@ -87,9 +98,9 @@ func rewriteEntryText(obj map[string]json.RawMessage, newText string, preserveHi
 		if preserveHidden {
 			finalText = brainctl.PreserveHiddenPromptWrappers(existing, newText)
 		}
-		enc, _ := json.Marshal(finalText)
+		enc, _ := marshalJSONLiteral(finalText)
 		msg["content"] = enc
-		encMsg, _ := json.Marshal(msg)
+		encMsg, _ := marshalJSONLiteral(msg)
 		obj["message"] = encMsg
 		return nil
 	}
@@ -120,9 +131,9 @@ func rewriteEntryText(obj map[string]json.RawMessage, newText string, preserveHi
 	if !replaced {
 		cleaned = append(cleaned, map[string]interface{}{"type": "text", "text": newText})
 	}
-	encContent, _ := json.Marshal(cleaned)
+	encContent, _ := marshalJSONLiteral(cleaned)
 	msg["content"] = encContent
-	encMsg, _ := json.Marshal(msg)
+	encMsg, _ := marshalJSONLiteral(msg)
 	obj["message"] = encMsg
 	return nil
 }
@@ -180,11 +191,11 @@ func (m *Manager) DeleteThinking(id, targetUUID string, contentIndex int) (int, 
 							if len(newBlocks) == 0 {
 								newBlocks = append(newBlocks, map[string]interface{}{"type": "text", "text": ""})
 							}
-							encContent, _ := json.Marshal(newBlocks)
+							encContent, _ := marshalJSONLiteral(newBlocks)
 							msg["content"] = encContent
-							encMsg, _ := json.Marshal(msg)
+							encMsg, _ := marshalJSONLiteral(msg)
 							obj["message"] = encMsg
-							if b, err := json.Marshal(obj); err == nil {
+							if b, err := marshalJSONLiteral(obj); err == nil {
 								out.Write(b)
 								out.WriteByte('\n')
 								found = true
