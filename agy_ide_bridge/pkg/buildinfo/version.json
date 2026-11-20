@@ -1,9 +1,13 @@
 {
-  "version_code": 131,
+  "version_code": 132,
   "version_name": "2.0.1",
-  "min_supported_version_code": 1,
+  "min_supported_version_code": 2,
   "changelog": [
-    "Finalized and moving to beta state"
+    "Rebranded to LytsoCoder (lytso.code / lytso.cdev) by @ItsLytso so it installs alongside AntiGem and Termux",
+    "Isolated local bridge, hub, and browser MCP ports (1240/1241/8770 release, 1242/1243/8771 debug)",
+    "Removed TelemetryDeck analytics SDK and unofficial-build notice",
+    "Updated in-app updater, release workflow, and repository links to Lytso/LytsoCoder",
+    "Kept Termux byte-for-byte relocation, rootfs-v2 mirrors, and backward-compatible chat/project import"
   ],
   "is_critical": false
 }

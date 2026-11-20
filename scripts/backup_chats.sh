@@ -1,10 +1,10 @@
-#!/data/data/ai.antigem/files/usr/bin/bash
+#!/data/data/lytso.code/files/usr/bin/bash
 # If invoked by a different shell or missing shebang interpreter, auto-detect and switch to bash
 if [ -z "${BASH_VERSION:-}" ]; then
     if [ -n "${PREFIX:-}" ] && [ -x "$PREFIX/bin/bash" ]; then
         exec "$PREFIX/bin/bash" "$0" "$@"
-    elif [ -x "/data/data/ai.antigem/files/usr/bin/bash" ]; then
-        exec "/data/data/ai.antigem/files/usr/bin/bash" "$0" "$@"
+    elif [ -x "/data/data/lytso.code/files/usr/bin/bash" ]; then
+        exec "/data/data/lytso.code/files/usr/bin/bash" "$0" "$@"
     elif command -v bash >/dev/null 2>&1; then
         exec bash "$0" "$@"
     fi
@@ -15,9 +15,9 @@ fi
 # ==============================================================================
 set -euo pipefail
 
-HOME_DIR="${HOME:-/data/data/ai.antigem/files/home}"
+HOME_DIR="${HOME:-/data/data/lytso.code/files/home}"
 GEMINI_DIR="${HOME_DIR}/.gemini"
-BACKUP_DIR="/sdcard/Download/Antigem/backups"
+BACKUP_DIR="/sdcard/Download/LytsoCoder/backups"
 TIMESTAMP="$(date +"%Y-%m-%d-%H-%M-%S")"
 ZIP_BASENAME="agy_chats_backup_${TIMESTAMP}.zip"
 OUTPUT_ZIP="${1:-${BACKUP_DIR}/${ZIP_BASENAME}}"
@@ -108,7 +108,7 @@ END {
 }
 '
 
-echo "[3/3] Exporting backup archive to Antigem backups storage..."
+echo "[3/3] Exporting backup archive to LytsoCoder backups storage..."
 mkdir -p "$(dirname "$OUTPUT_ZIP")"
 cp "$TEMP_ZIP" "$OUTPUT_ZIP"
 rm -f "$TEMP_ZIP"

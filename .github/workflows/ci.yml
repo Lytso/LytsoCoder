@@ -1,0 +1,55 @@
+name: CI Build & Test
+
+on:
+  push:
+    branches:
+      - standalone
+  pull_request:
+    branches:
+      - standalone
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch the termux-am submodule
+        run: git submodule update --init --depth 1 termux-am
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'agy_ide_bridge/go.mod'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run Go bridge tests
+        working-directory: agy_ide_bridge
+        run: go test ./...
+
+      - name: Run Android unit tests and build Debug APK
+        run: |
+          chmod +x gradlew scripts/build_all_apks.sh
+          ./gradlew :app:testDebugUnitTest
+          ./scripts/build_all_apks.sh
+
+      - name: Upload Debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LytsoCoder-debug-apk
+          path: output/*.apk
+          if-no-files-found: error
+          retention-days: 14

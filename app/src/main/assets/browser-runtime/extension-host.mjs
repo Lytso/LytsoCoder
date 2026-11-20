@@ -20,7 +20,7 @@ export class ExtensionHost {
     this.options = { bridgeUrl: process.env.AGY_BRIDGE_URL || 'http://127.0.0.1:8765', deviceId: process.env.AGY_DEVICE_ID || process.env.DEVICE_ID || '', root: ROOT, hostPort: 8865, ...options };
     this.logs = []; this.extensions = new Map(); this.toolRegistry = new Map(); this.contexts = new Map(); this.pendingMessages = new Map(); this.ports = new Map();
     this.browser = new BrowserAPI(this); this.sequence = 0; this.downloads = new Map(); this.downloadCounter = 0; this.closed = false; this.polling = false; this.disabledIds = new Set();
-    this.stateRoot = options.stateRoot || path.join(this.options.root, '.antigem-state'); this.server = null;
+    this.stateRoot = options.stateRoot || path.join(this.options.root, '.lytsocoder-state'); this.server = null;
   }
   recordLog(extensionId,level,args){const message=args.map(value=>{if(value?.stack)return value.stack;try{return typeof value==='string'?value:JSON.stringify(value)??String(value);}catch{return String(value);}}).join(' ').slice(0,8000);this.logs.push({extension_id:extensionId,time:Date.now(),level,message});if(this.logs.length>500)this.logs.splice(0,this.logs.length-500);}
   resourceBase(ext) { return `${this.baseUrl || `http://127.0.0.1:${this.options.hostPort}`}/extension/${ext.resourceToken}/`; }
@@ -81,7 +81,7 @@ export class ExtensionHost {
     const sandbox = { console: log, chrome, browser: chrome, setTimeout: (...a) => timer(false, ...a), setInterval: (...a) => timer(true, ...a), clearTimeout: h => { clearTimeout(h); ctx.timers.delete(h); }, clearInterval: h => { clearInterval(h); ctx.timers.delete(h); },
       fetch: (input, options) => fetch(typeof input === 'string' ? new URL(input, workerURL) : input, options), URL, URLSearchParams, TextEncoder, TextDecoder,
       Blob, FormData, Request, Response, Headers, AbortController, AbortSignal, crypto: webcrypto, performance, structuredClone, atob, btoa,
-      Event, EventTarget, MessageEvent, WebSocket: globalThis.WebSocket, navigator: { userAgent: `AntiGem Extension Host Node/${process.versions.node}`, language: 'en', languages: ['en'] }, location: new URL(workerURL) };
+      Event, EventTarget, MessageEvent, WebSocket: globalThis.WebSocket, navigator: { userAgent: `LytsoCoder Extension Host Node/${process.versions.node}`, language: 'en', languages: ['en'] }, location: new URL(workerURL) };
     sandbox.self = sandbox; sandbox.globalThis = sandbox;
     const scopeEvents = new EventTarget(); sandbox.addEventListener = scopeEvents.addEventListener.bind(scopeEvents); sandbox.removeEventListener = scopeEvents.removeEventListener.bind(scopeEvents); sandbox.dispatchEvent = scopeEvents.dispatchEvent.bind(scopeEvents);
     const context = vm.createContext(sandbox); ext.context = context; ext.background = ctx;
@@ -133,7 +133,7 @@ export class ExtensionHost {
     }
     if (method === 'runtime.portMessage' || method === 'runtime.portDisconnect') { const p = this.ports.get(args.portId); if (!p?.peers.has(ctx.id)) throw new Error('Attempting to use a disconnected port'); for (const id of p.peers) if (id !== ctx.id) { const peer = this.contexts.get(id); if (peer) this.send(peer, method === 'runtime.portMessage' ? 'runtime.portMessage' : 'runtime.portDisconnect', method === 'runtime.portMessage' ? [args.portId, args.message] : [args.portId]); } if (method.endsWith('portDisconnect')) this.ports.delete(args.portId); return; }
     if (method === 'runtime.getPlatformInfo') return { os: 'android', arch: process.arch === 'arm64' ? 'arm64' : process.arch, nacl_arch: process.arch };
-    if (method === 'runtime.getBrowserInfo') return { name: 'AntiGem', vendor: 'AntiGem', version: '1.0', buildID: process.version };
+    if (method === 'runtime.getBrowserInfo') return { name: 'LytsoCoder', vendor: 'LytsoCoder', version: '1.0', buildID: process.version };
     if (method === 'runtime.getContexts') return [...this.contexts.values()].filter(c => c.extension === ext).map(c => ({ contextId: c.id, contextType: c.type.toUpperCase(), tabId: c.tabId ?? -1, frameId: c.frameId ?? -1, documentUrl: c.url || '' }));
     if (method === 'runtime.reload') { setTimeout(() => this.reload(ext.id).catch(console.error), 10); return; }
     if (method === 'runtime.openOptionsPage' || method.startsWith('sidePanel.') || ['action.openPopup','action.setPopup','action.getPopup'].includes(method)) throw new Error('Extension UI is not supported; use this extension through its MCP server in Settings');

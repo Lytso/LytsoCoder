@@ -1,23 +1,10 @@
+# LytsoCoder Repository Guidelines
 
--- This whole below prompt only applies to you iig you are gemini models
-## 3. Communication & User Interaction Rules
-
-- **Answer Questions First**: When the user asks a question, points out an issue, or argues a design point, ALWAYS answer and explain directly to the user in text first.
-- **Do Not Stealth-Edit Files**: Never start modifying code in silence instead of answering the user's question or addressing their direct feedback.
-- **Format Parity**: Both JSON and binary gRPC return the exact same protobuf schema and fields from the daemon; never assume or claim they return different keys or formats.
-- **Only do what user has told you to do**: Never touch a single line that user has not told to do, if user said to do Task X then do that nothing else not even add a signle extra space somewhere, if need such things to chagne mroe than user has asked for, alwasy explain user that you want to do this too.
-
--- "Dont try building release build ever"
--- "Dont try git push pull commit, stash etc ever"
-
--- While running new command for build/etc always check for previous if ther is runnign smae thigns then either kill it then start new or wait for old (Dont run both);
-
--- Always check running process before exectuing new task run(so that you dont execute same task twice or more times)
-
--- Always explain user every single details that you are going to change to fix or add something(Dont need line by line but still enoough) and dont start editing, alwasy explain to user, and stop there, user will respond back with continue,do it or whatever or ask you more question,arguement
-
-- "Dont do gralew install or any install relelated command(Only applies to gemini models)
-
-- Never ever try to compile or assemble for Standard Build, alwasy for termuxBuild only
-
-- If you are not 100% sure for someting how to do, never try to do, always ask user for direction this case without understanding what user want.
+- **Package IDs (10-byte rule)**: `TermuxRelocation` rewrites `com.termux` (10 bytes) byte-for-byte in Termux binaries and `.deb` packages. Release builds MUST use `lytso.code` (10 chars) and debug builds MUST use `lytso.cdev` (10 chars).
+- **Local ports**: Release uses `BRIDGE_PORT=1240`, `HUB_PORT=1241`, `BROWSER_MCP_PORT=8770`; debug uses `1242`, `1243`, `8771` so LytsoCoder runs alongside Termux (`1234/1235/8765`) and AntiGem (`1236/1237/8767`).
+- **Build & test**:
+  - Go bridge tests: `cd agy_ide_bridge && go test ./...`
+  - Android unit tests & debug APK: `./gradlew :app:testDebugUnitTest :app:assembleDebug`
+  - Note: `./gradlew :app:preBuild` builds `agy_ide_bridge` (Go `GOOS=android GOARCH=arm64`), compresses it with `xz`, syncs `scripts/*.sh` into `app/src/main/assets/bin/`, and builds `termux-am` (`am.apk`). Always initialize the `termux-am` submodule before building.
+- **Rootfs mirrors**: `LocalEnvironmentManager.kt` fetches `rootfs-v2` (`bootrapz_2026-11-19.zip`) from the upstream GitHub/Hugging Face mirrors unless overridden in `Lytso/LytsoCoder`.
+- **Attribution**: LytsoCoder is maintained by `@ItsLytso` and licensed under GPLv3 (forked from `Santoshkurmi/antigem`).

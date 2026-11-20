@@ -2,7 +2,7 @@
 <resources>
 
     <!-- Base application theme: splash with the centered Prism mark on graphite (splash_colors.xml) -->
-    <style name="Theme.Gemini" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.LytsoCoder" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@drawable/splash_background</item>
         <item name="android:windowSplashScreenBackground">@color/splash_bg</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_prism_animated</item>
@@ -12,8 +12,8 @@
         <item name="android:windowLightStatusBar">@bool/splash_light_bars</item>
     </style>
 
-    <!-- Facebook Messenger-style Floating Multitasking Window Theme -->
-    <style name="Theme.AntiGem.FloatingTranslucent" parent="android:Theme.Material.Light.NoActionBar">
+    <!-- Floating Multitasking Window Theme -->
+    <style name="Theme.LytsoCoder.FloatingTranslucent" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowContentOverlay">@null</item>
