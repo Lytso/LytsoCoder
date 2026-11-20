@@ -68,6 +68,31 @@ object TermuxRelocation {
         return relocateTree(root, pkg, onProgress)
     }
 
+    private enum class EntryKind { LINK, DIR, FILE }
+
+    private val useAndroidOs: Boolean by lazy {
+        try { Os.lstat(".") != null } catch (_: Throwable) { false }
+    }
+
+    @android.annotation.SuppressLint("NewApi")
+    private object NioFallback {
+        fun kindOf(file: File): EntryKind? {
+            val p = file.toPath()
+            return when {
+                java.nio.file.Files.isSymbolicLink(p) -> EntryKind.LINK
+                java.nio.file.Files.isDirectory(p, java.nio.file.LinkOption.NOFOLLOW_LINKS) -> EntryKind.DIR
+                java.nio.file.Files.isRegularFile(p, java.nio.file.LinkOption.NOFOLLOW_LINKS) -> EntryKind.FILE
+                else -> null
+            }
+        }
+
+        fun readLink(file: File): String = java.nio.file.Files.readSymbolicLink(file.toPath()).toString()
+
+        fun createSymlink(target: String, link: File) {
+            java.nio.file.Files.createSymbolicLink(link.toPath(), java.nio.file.Paths.get(target))
+        }
+    }
+
     /**
      * Rewrites every file and symlink under [root] from any known 10-byte source package to [newPackage].
      * With [pathsOnly], only matches immediately after "/" (/data/data/<pkg>/…, /data/user/0/<pkg>/…) are
@@ -91,15 +116,27 @@ object TermuxRelocation {
             // checksum and objects are compressed, so the rest is left alone
             val children = if (dir.name == ".git") arrayOf(File(dir, "config")) else dir.listFiles() ?: continue
             for (f in children) {
-                val mode = try { Os.lstat(f.absolutePath).st_mode } catch (_: Exception) { continue }
-                when {
-                    OsConstants.S_ISLNK(mode) -> if (relink(f, newPackage, pathsOnly)) stats.links++
-                    OsConstants.S_ISDIR(mode) -> dirs.add(f)
-                    OsConstants.S_ISREG(mode) -> {
+                val (kind, mode) = if (useAndroidOs) {
+                    val m = try { Os.lstat(f.absolutePath).st_mode } catch (_: Exception) { continue }
+                    val k = when {
+                        OsConstants.S_ISLNK(m) -> EntryKind.LINK
+                        OsConstants.S_ISDIR(m) -> EntryKind.DIR
+                        OsConstants.S_ISREG(m) -> EntryKind.FILE
+                        else -> null
+                    }
+                    k to m
+                } else {
+                    (try { NioFallback.kindOf(f) } catch (_: Exception) { null }) to 0
+                }
+                when (kind) {
+                    EntryKind.LINK -> if (relink(f, newPackage, pathsOnly)) stats.links++
+                    EntryKind.DIR -> dirs.add(f)
+                    EntryKind.FILE -> {
                         stats.files++
                         if (patchFile(f, mode, sources, new, pathsOnly)) stats.patchedFiles++
                         if (stats.files % 500 == 0) onProgress?.invoke(stats.files)
                     }
+                    null -> {}
                 }
             }
         }
@@ -116,13 +153,15 @@ object TermuxRelocation {
             }
 
     private fun relink(link: File, newPackage: String, pathsOnly: Boolean): Boolean {
-        val target = try { Os.readlink(link.absolutePath) } catch (_: Exception) { return false }
+        val target = try {
+            if (useAndroidOs) Os.readlink(link.absolutePath) else NioFallback.readLink(link)
+        } catch (_: Exception) { return false }
         if (KNOWN_SOURCE_PACKAGES.none { it != newPackage && target.contains(it) }) return false
         val newTarget = String(rewrite(target.toByteArray(Charsets.UTF_8), newPackage, pathsOnly), Charsets.UTF_8)
         if (newTarget == target) return false
         return try {
             link.delete()
-            Os.symlink(newTarget, link.absolutePath)
+            if (useAndroidOs) Os.symlink(newTarget, link.absolutePath) else NioFallback.createSymlink(newTarget, link)
             true
         } catch (e: Exception) {
             Log.w(TAG, "Relinking ${link.absolutePath} -> $target failed: ${e.message}")
@@ -136,8 +175,10 @@ object TermuxRelocation {
             val offsets = findAll(file, patterns, pathsOnly)
             if (offsets.isEmpty()) return false
             val perms = mode and 0xFFF
-            val ownerWritable = (perms and 0x80) != 0 // S_IWUSR
-            if (!ownerWritable) Os.chmod(file.absolutePath, perms or 0x80)
+            val ownerWritable = if (useAndroidOs) (perms and 0x80) != 0 else file.canWrite()
+            if (!ownerWritable) {
+                if (useAndroidOs) Os.chmod(file.absolutePath, perms or 0x80) else file.setWritable(true, true)
+            }
             try {
                 RandomAccessFile(file, "rw").use { raf ->
                     for (offset in offsets) {
@@ -146,7 +187,11 @@ object TermuxRelocation {
                     }
                 }
             } finally {
-                if (!ownerWritable) try { Os.chmod(file.absolutePath, perms) } catch (_: Exception) {}
+                if (!ownerWritable) {
+                    try {
+                        if (useAndroidOs) Os.chmod(file.absolutePath, perms) else file.setReadOnly()
+                    } catch (_: Exception) {}
+                }
             }
             true
         } catch (e: Exception) {
