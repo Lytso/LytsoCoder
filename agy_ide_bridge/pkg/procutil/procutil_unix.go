@@ -46,7 +46,8 @@ func SignalGroup(cmd *exec.Cmd, sig syscall.Signal) error {
 	}
 	pid := cmd.Process.Pid
 	pgid, err := syscall.Getpgid(pid)
-	if err == nil && pgid > 0 && pgid != os.Getpgrp() {
+	selfPgid, selfErr := syscall.Getpgid(0)
+	if err == nil && pgid > 0 && (selfErr != nil || pgid != selfPgid) {
 		err = syscall.Kill(-pgid, sig)
 		if errors.Is(err, syscall.ESRCH) {
 			return os.ErrProcessDone
