@@ -2,6 +2,7 @@ package hub
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -679,6 +680,17 @@ func (m *HubManager) Start() error {
 		if mem := filepath.Join(home, ".lytsocoder", "memory"); os.MkdirAll(mem, 0o700) == nil {
 			args = append(args, "--add-dir="+mem)
 		}
+		// Official LytsoCoder AI workspace hierarchy (~/lytso_home/...)
+		lytsoHome := ensureLytsoHomeLayout(home)
+		if lytsoHome != "" {
+			args = append(args, "--add-dir="+lytsoHome)
+		}
+		// User-added modular explorer directories (~/.lytsocoder/custom_roots.json)
+		for _, extraDir := range loadCustomRootPaths(home) {
+			if fi, err := os.Stat(extraDir); err == nil && fi.IsDir() {
+				args = append(args, "--add-dir="+extraDir)
+			}
+		}
 	}
 
 	shArgs := append([]string{"-c", `exec "$0" "$@"`, m.AgyBinPath}, args...)
@@ -694,10 +706,22 @@ func (m *HubManager) Start() error {
 		usrBin = filepath.Join(prefix, "bin")
 	}
 
+	allowRoot := isAiRootAllowed(home)
+	basePath := geminiBin + ":" + localBin + ":" + usrBin + ":/usr/local/bin:/usr/bin:/bin:/system/bin:/system/xbin:" + os.Getenv("PATH")
+	rootAllowedEnv := "1"
+	if !allowRoot {
+		rootAllowedEnv = "0"
+		if guardDir := ensureAiRootGuardDir(home); guardDir != "" {
+			basePath = guardDir + ":" + basePath
+		}
+	}
+
 	cmd.Env = append(os.Environ(),
 		"HOME="+home,
 		"USERPROFILE="+home,
-		"PATH="+geminiBin+":"+localBin+":"+usrBin+":/usr/local/bin:/usr/bin:/bin:/system/bin:/system/xbin:"+os.Getenv("PATH"),
+		"LYTSO_HOME="+filepath.Join(home, "lytso_home"),
+		"LYTSO_AI_ROOT_ALLOWED="+rootAllowedEnv,
+		"PATH="+basePath,
 		"AGY_ENABLE_HUB=1",
 		"ANTIGRAVITY_VSCODE_HOST=1",
 		"ANTIGRAVITY_AUTH_SUCCESS_APP=vscode",
@@ -968,12 +992,108 @@ func (m *HubManager) WithPausedHub(fn func() error) (bool, error) {
 
 	if shouldStop && !m.Disabled {
 		startErr := m.Start()
+		if startErr == nil {
+			// Wait until the restarted hub port is actually accepting connections (and has published its new
+			// CSRF token when running the real agy binary) before returning, so the Android client never
+			// reconnects into a half-booted hub and triggers a false "Antigravity Disconnected" banner.
+			readyDeadline := time.Now().Add(12 * time.Second)
+			var readySince time.Time
+			for time.Now().Before(readyDeadline) {
+				if m.isHubReady() {
+					if m.GetCsrfToken() != "" {
+						break
+					}
+					if readySince.IsZero() {
+						readySince = time.Now()
+					} else if time.Since(readySince) >= 1200*time.Millisecond {
+						// Hub is accepting HTTP traffic (e.g. test double or tokenless mode).
+						break
+					}
+				}
+				m.mu.Lock()
+				alive := m.isRunning
+				m.mu.Unlock()
+				if !alive {
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
 		if fnErr != nil {
 			return true, fnErr
 		}
 		return true, startErr
 	}
 	return false, fnErr
+}
+
+func ensureLytsoHomeLayout(home string) string {
+	if home == "" {
+		return ""
+	}
+	base := filepath.Join(home, "lytso_home")
+	subdirs := []string{"projects", "keys", "scripts", "logs", "dumps", "tmp", "builds", "tools", "cloud", "backups"}
+	for _, sub := range subdirs {
+		_ = os.MkdirAll(filepath.Join(base, sub), 0o700)
+	}
+	return base
+}
+
+func loadCustomRootPaths(home string) []string {
+	if home == "" {
+		return nil
+	}
+	raw, err := os.ReadFile(filepath.Join(home, ".lytsocoder", "custom_roots.json"))
+	if err != nil {
+		return nil
+	}
+	var items []struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		p := strings.TrimSpace(it.Path)
+		if p != "" {
+			out = append(out, filepath.Clean(p))
+		}
+	}
+	return out
+}
+
+func isAiRootAllowed(home string) bool {
+	if home == "" {
+		return false
+	}
+	raw, err := os.ReadFile(filepath.Join(home, ".lytsocoder", "ai_permissions.json"))
+	if err != nil {
+		return false
+	}
+	var cfg struct {
+		AllowRoot bool `json:"allowRoot"`
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return false
+	}
+	return cfg.AllowRoot
+}
+
+func ensureAiRootGuardDir(home string) string {
+	if home == "" {
+		return ""
+	}
+	dir := filepath.Join(home, ".lytsocoder", "ai_bin_guard")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return ""
+	}
+	shim := "#!/system/bin/sh\necho \"[LytsoCoder Policy] Root access ($0) is blocked for AI agents. Enable it in Settings -> AI Permissions & Root.\" >&2\nexit 126\n"
+	for _, name := range []string{"su", "tsu", "sudo"} {
+		p := filepath.Join(dir, name)
+		_ = os.WriteFile(p, []byte(shim), 0o700)
+	}
+	return dir
 }
 
 func (m *HubManager) handleHubLine(line string) {

@@ -35,6 +35,8 @@ class GlobalContextTest {
         )
         assertEquals(origFp, sentFp)
         assertTrue(firstWrapped.contains("## Where you run"))
+        assertTrue(firstWrapped.contains("~/lytso_home/projects/"))
+        assertTrue(firstWrapped.contains("~/lytso_home/keys/"))
         assertTrue(firstWrapped.contains("hello world"))
 
         // Second message with unchanged built-in context does not resend first-message block.

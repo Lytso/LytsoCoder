@@ -206,7 +206,7 @@ private fun RunScreenContent(runs: List<RunEntry>, onClose: () -> Unit, onSendTo
         }
     }
 
-    Surface(color = AppColors.editorBg, modifier = Modifier.fillMaxSize()) {
+    Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {
                 PanelHeader(
                     onClose = onClose,

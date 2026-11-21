@@ -901,7 +901,7 @@ class CodexChatBackend(
                             )
                         }
                         lytso.code.data.context.GlobalContext.copyChatSystemPrompt(id, newId)
-                        _toasts.tryEmit("Branched conversation")
+                        _toasts.tryEmit("Branched conversation · inherited history & chat prompt")
                     }
                     refreshThreads()
                     if (newId != null) selectConversation(newId)

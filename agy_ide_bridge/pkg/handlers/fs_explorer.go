@@ -223,8 +223,12 @@ func (h *Handler) FsRootsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	add("Home", home, "home", true)
+	add("Lytso Home", filepath.Join(home, "lytso_home"), "projects", false)
 	if h.Cfg.ProjectsBaseDir != "" {
 		add("Projects", h.Cfg.ProjectsBaseDir, "projects", false)
+	}
+	for _, cr := range loadCustomRoots(home) {
+		add(cr.Name, cr.Path, "custom", false)
 	}
 	storage := ""
 	for _, cand := range []string{"/storage/emulated/0", "/sdcard"} {
@@ -259,6 +263,111 @@ func (h *Handler) FsRootsHandler(w http.ResponseWriter, r *http.Request) {
 		roots = []fsRoot{}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"home": home, "roots": roots})
+}
+
+type customRootEntry struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+func customRootsFilePath(home string) string {
+	return filepath.Join(home, ".lytsocoder", "custom_roots.json")
+}
+
+func loadCustomRoots(home string) []customRootEntry {
+	raw, err := os.ReadFile(customRootsFilePath(home))
+	if err != nil {
+		return nil
+	}
+	var out []customRootEntry
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+func saveCustomRoots(home string, list []customRootEntry) error {
+	p := customRootsFilePath(home)
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(list, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(p, data, 0o600)
+}
+
+// FsCustomRootsHandler manages user-defined modular explorer roots (shared by Files explorer, AI agents & mini-apps).
+func (h *Handler) FsCustomRootsHandler(w http.ResponseWriter, r *http.Request) {
+	home := fsHome(h)
+	switch r.Method {
+	case http.MethodGet:
+		list := loadCustomRoots(home)
+		if list == nil {
+			list = []customRootEntry{}
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"roots": list})
+	case http.MethodPost:
+		var req customRootEntry
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Path) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "path is required"})
+			return
+		}
+		clean := filepath.Clean(fsResolve(h, req.Path))
+		info, err := os.Stat(clean)
+		if err != nil || !info.IsDir() {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "directory not found or not accessible: " + clean})
+			return
+		}
+		name := strings.TrimSpace(req.Name)
+		if name == "" {
+			name = filepath.Base(clean)
+			if name == "/" || name == "." || name == "" {
+				name = clean
+			}
+		}
+		list := loadCustomRoots(home)
+		updated := false
+		for i := range list {
+			if filepath.Clean(list[i].Path) == clean {
+				list[i].Name = name
+				updated = true
+				break
+			}
+		}
+		if !updated {
+			list = append(list, customRootEntry{Name: name, Path: clean})
+		}
+		if err := saveCustomRoots(home, list); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"success": true, "roots": list})
+	case http.MethodDelete:
+		var req struct {
+			Path string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Path) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "path is required"})
+			return
+		}
+		target := filepath.Clean(req.Path)
+		list := loadCustomRoots(home)
+		filtered := make([]customRootEntry, 0, len(list))
+		for _, item := range list {
+			if filepath.Clean(item.Path) != target {
+				filtered = append(filtered, item)
+			}
+		}
+		if err := saveCustomRoots(home, filtered); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"success": true, "roots": filtered})
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 // ---------- /api/fs/stat ----------

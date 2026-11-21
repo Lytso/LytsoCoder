@@ -113,8 +113,9 @@ enum class SettingsSection(val title: String, val subtitle: String) {
     /** One Codex page (which one: the dialog's codexPage). */
     CODEX_PAGE("Codex", "Account & CLI, usage limits, permissions, MCP"),
     AGENTS("Agents", "Run Antigravity, Claude Code, OpenCode, Codex or several"),
-    GLOBAL_SYSTEM_PROMPT("System prompt", "Default persona & system instructions for every chat (override per chat anytime)"),
-    GLOBAL_CONTEXT("Global context", "What every chat is told about this app, and your own instructions"),
+    GLOBAL_SYSTEM_PROMPT("System prompt", "Global default persona & <identity> override"),
+    GLOBAL_CONTEXT("Global context", "App environment, ~/lytso_home/ layout & standing instructions"),
+    AI_PERMISSIONS("AI Permissions & Root", "Root access (Termux), capabilities & explorer directories"),
     AGENT_MEMORY("Agent memory & history", "Memories every agent keeps across chats, and past chats they can look up"),
     AGENT_HISTORY("Saved chats", "The chat history the agents can look up: read, edit or remove it"),
     JARVIS("Jarvis", "Hands-free voice control of the whole app"),
@@ -165,7 +166,7 @@ enum class SettingsSection(val title: String, val subtitle: String) {
         CODEX_PAGE -> CODEX
         TERMUX_API, X11_DESKTOP -> TERMUX_SUPPORT
         REA_GROUPS -> REA
-        GLOBAL_SYSTEM_PROMPT, GLOBAL_CONTEXT, AGENT_MEMORY -> AGENTS
+        AGENT_MEMORY -> AGENTS
         AGENT_HISTORY -> AGENT_MEMORY
         CHANGELOG -> ABOUT
         else -> if (jarvisPage != null) JARVIS else MAIN
@@ -339,13 +340,30 @@ fun SettingsDialog(
     // Hoisted so the main list keeps its position while a sub-section is open
     val mainMenuScrollState = rememberScrollState()
 
-    // Intercept system Back button
-    BackHandler(enabled = true) {
-        if (currentSection != SettingsSection.MAIN) {
+    // Navigation history stack so Back always returns to the exact screen the user came from
+    val navHistory = remember { mutableStateListOf<SettingsSection>() }
+    fun navigateTo(target: SettingsSection) {
+        if (target == currentSection) return
+        if (target == SettingsSection.MAIN) {
+            navHistory.clear()
+        } else {
+            navHistory.add(currentSection)
+        }
+        currentSection = target
+    }
+    fun navigateBack() {
+        if (navHistory.isNotEmpty()) {
+            currentSection = navHistory.removeAt(navHistory.lastIndex)
+        } else if (currentSection != SettingsSection.MAIN) {
             currentSection = currentSection.parent
         } else {
             onDismiss()
         }
+    }
+
+    // Intercept system Back button
+    BackHandler(enabled = true) {
+        navigateBack()
     }
 
     val isDark = isAppInDarkTheme()
@@ -395,13 +413,7 @@ fun SettingsDialog(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        if (currentSection != SettingsSection.MAIN) {
-                            currentSection = currentSection.parent
-                        } else {
-                            onDismiss()
-                        }
-                    }) {
+                    IconButton(onClick = { navigateBack() }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
@@ -461,7 +473,7 @@ fun SettingsDialog(
                         claude = claude,
                         openCode = openCode,
                         codex = codex,
-                        onNavigate = { currentSection = it }
+                        onNavigate = { navigateTo(it) }
                     )
 
                     SettingsSection.THEMES -> ThemesSubScreen(
@@ -646,10 +658,14 @@ fun SettingsDialog(
                         onOpenAgentMemory = { currentSection = SettingsSection.AGENT_MEMORY }
                     )
                     SettingsSection.GLOBAL_SYSTEM_PROMPT -> GlobalSystemPromptScreen(
-                        onOpenGlobalContext = { currentSection = SettingsSection.GLOBAL_CONTEXT }
+                        onOpenGlobalContext = { navigateTo(SettingsSection.GLOBAL_CONTEXT) }
                     )
                     SettingsSection.GLOBAL_CONTEXT -> GlobalContextScreen(
-                        onOpenGlobalSystemPrompt = { currentSection = SettingsSection.GLOBAL_SYSTEM_PROMPT }
+                        onOpenGlobalSystemPrompt = { navigateTo(SettingsSection.GLOBAL_SYSTEM_PROMPT) }
+                    )
+                    SettingsSection.AI_PERMISSIONS -> AiPermissionsAndExplorerScreen(
+                        cardBg = cardBg,
+                        cardBorder = cardBorder
                     )
                     SettingsSection.AGENT_MEMORY -> AgentMemoryScreen(onOpenHistory = { currentSection = SettingsSection.AGENT_HISTORY })
                     SettingsSection.AGENT_HISTORY -> AgentHistoryScreen()
@@ -673,7 +689,7 @@ fun SettingsDialog(
                         installedPlugins = installedPlugins,
                         commandAutoExecutionPolicy = commandAutoExecutionPolicy,
                         cardBg = cardBg,
-                        onNavigate = { currentSection = it }
+                        onNavigate = { navigateTo(it) }
                     )
                     SettingsSection.AGY_CLI -> Column(
                         Modifier.fillMaxSize().bouncyVerticalScroll(rememberScrollState()).padding(16.dp),
@@ -729,7 +745,7 @@ fun SettingsDialog(
                     }
                     SettingsSection.UTILITIES -> UtilitiesSubScreen(
                         cardBg = cardBg,
-                        onNavigate = { currentSection = it }
+                        onNavigate = { navigateTo(it) }
                     )
                     SettingsSection.GITHUB -> GitHubScreen(
                         cardBg = cardBg,
@@ -750,7 +766,7 @@ fun SettingsDialog(
                     )
                     SettingsSection.TERMUX_SUPPORT -> TermuxSupportMenu(
                         cardBg = cardBg,
-                        onNavigate = { currentSection = it }
+                        onNavigate = { navigateTo(it) }
                     )
                     SettingsSection.TERMUX_API -> TermuxApiSubScreen(
                         cardBg = cardBg,
@@ -998,7 +1014,13 @@ private fun MainSettingsMenu(
                         c.accentTeal,
                         value = if (builtInCtxOn) "On" else "Off",
                         valueColor = if (builtInCtxOn) QuotaGreen else null,
-                        subtitle = "Environment & standing instructions"
+                        subtitle = "Environment, ~/lytso_home/ & instructions"
+                    ),
+                    row(
+                        SettingsSection.AI_PERMISSIONS,
+                        Icons.Outlined.AdminPanelSettings,
+                        c.danger,
+                        subtitle = "Root (Termux), capabilities & explorer folders"
                     ),
                     row(SettingsSection.AGENTS, Icons.Outlined.SmartToy, MaterialTheme.colorScheme.primary, when {
                         enabledAgents.size == lytso.code.domain.model.AgentKind.entries.size -> "All agents"

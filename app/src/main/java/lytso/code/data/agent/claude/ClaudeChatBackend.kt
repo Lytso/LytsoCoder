@@ -439,7 +439,7 @@ class ClaudeChatBackend(
                     upsertLocal(source.copy(id = newId, sessionId = newId, title = title, createdAt = now, updatedAt = now, isRunning = false))
                     withContext(Dispatchers.Main) {
                         lytso.code.ui.components.AppToastHelper.showToast(
-                            "Branched conversation",
+                            "Branched conversation · inherited history & chat prompt",
                             lytso.code.ui.components.ChatToastType.SUCCESS
                         )
                         selectConversation(newId)

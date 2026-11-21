@@ -431,6 +431,8 @@ func main() {
 	mux.HandleFunc("/api/fs/mkdir", h.FsMkdirHandler)
 	// Files screen (explorer): places, details, safe create / rename, batch copy / move / delete, zip, unzip, search, streaming
 	mux.HandleFunc("/api/fs/roots", h.FsRootsHandler)
+	mux.HandleFunc("/api/fs/custom-roots", h.FsCustomRootsHandler)
+	mux.HandleFunc("/api/ai/permissions", h.AiPermissionsHandler)
 	mux.HandleFunc("/api/fs/stat", h.FsStatHandler)
 	mux.HandleFunc("/api/fs/new", h.FsNewHandler)
 	mux.HandleFunc("/api/fs/rename", h.FsRenameHandler)

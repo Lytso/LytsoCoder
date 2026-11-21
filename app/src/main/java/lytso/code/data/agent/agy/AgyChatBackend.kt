@@ -1791,18 +1791,6 @@ class AgyChatBackend(
     override fun forkConversation(id: String) = forkConversationAt(id, forkAtStepIndex = null)
 
     fun forkConversationAt(id: String, forkAtStepIndex: Int?) {
-        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
-        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
-        backendScope.launch {
-            agyBridgeService.agyAccountEvents.collectLatest {
-                delay(300)
-                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
-            }
-        }
-        lytso.code.data.remote.AgyAccounts.replyRunning = {
-            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
-        }
-
         backendScope.launch {
             _isLoadingConversation.value = true
             _conversationError.value = null
@@ -1815,7 +1803,7 @@ class AgyChatBackend(
                         lytso.code.data.context.GlobalContext.copyChatSystemPrompt(id, newCascadeId)
                         withContext(Dispatchers.Main) {
                             lytso.code.ui.components.AppToastHelper.showToast(
-                                "Branched conversation",
+                                "Branched conversation · inherited history & chat prompt",
                                 lytso.code.ui.components.ChatToastType.SUCCESS
                             )
                         }
@@ -1878,8 +1866,22 @@ class AgyChatBackend(
                 if (!returnedCsrf.isNullOrBlank()) {
                     lytso.code.data.remote.core.AgyCsrfManager.instance.setCachedToken(hubUrl, returnedCsrf)
                 } else if (restarted) {
-                    agyBridgeService.fetchServerStatus(AuthPreferences.currentBridgeHttpUrl)
-                    lytso.code.data.remote.core.AgyCsrfManager.instance.awaitToken(5_000L)
+                    // Poll until the restarted hub reports online and has published a fresh CSRF token,
+                    // preventing transient "Antigravity Disconnected" banners right after offline SQLite mutations.
+                    val deadline = System.currentTimeMillis() + 10_000L
+                    while (System.currentTimeMillis() < deadline) {
+                        val st = agyBridgeService.fetchServerStatus(AuthPreferences.currentBridgeHttpUrl)
+                        if (st?.status == "online") {
+                            val token = lytso.code.data.remote.core.AgyCsrfManager.instance.awaitToken(1_500L)
+                            if (!token.isNullOrBlank()) break
+                        }
+                        delay(250)
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    _isServerOnline.value = true
+                    _isReconnecting.value = false
+                    _conversationError.value = null
                 }
                 isBrainMutating = false
                 forceReloadAfterBrainMutation(convId)

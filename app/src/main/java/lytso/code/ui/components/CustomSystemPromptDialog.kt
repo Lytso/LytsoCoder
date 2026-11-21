@@ -290,15 +290,34 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                     }
                 } else {
                     // Custom override prompt
-                    Text(
-                        text = "Replaces the agent's default <identity> (role: system). Leave empty to inherit your Global System Prompt" +
-                            (if (globalTrimmed != null) " (active)" else " (none set → uses agent default)") +
-                            ". Other chats with their own prompts always keep theirs.",
-                        fontSize = 11.5.sp,
-                        lineHeight = 15.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                            Text(
+                                text = "Priority: 1. This Chat  →  2. Global (Settings)  →  3. Default",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (globalTrimmed != null) {
+                                    "Applies only to this chat. Leave empty to inherit your Global System Prompt."
+                                } else {
+                                    "Applies only to this chat. Set a Global default in Settings → System prompt."
+                                },
+                                fontSize = 11.5.sp,
+                                lineHeight = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     OutlinedTextField(
                         value = promptText,
                         onValueChange = { promptText = it },
@@ -354,9 +373,9 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                         Spacer(modifier = Modifier.width(4.dp))
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                            Text("Close", fontSize = 12.5.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 10.dp)) {
+                            Text("Close", fontSize = 13.sp, maxLines = 1, softWrap = false)
                         }
                         if (selectedTab == 0) {
                             Button(
@@ -370,25 +389,14 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                                     containerColor = MaterialTheme.colorScheme.primary,
                                     contentColor = MaterialTheme.colorScheme.onPrimary
                                 ),
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
                             ) {
                                 Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Edit as override", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Override", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                             }
                         } else if (selectedTab == 1) {
-                            if (onSaveGlobalPrompt != null && promptText.isNotBlank()) {
-                                OutlinedButton(
-                                    onClick = {
-                                        onSaveGlobalPrompt(promptText.trim())
-                                        onDismiss()
-                                    },
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
-                                ) {
-                                    Text("Set Global", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                                }
-                            }
                             Button(
                                 onClick = {
                                     onSavePrompt(promptText.ifBlank { null })
@@ -399,12 +407,14 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                                     contentColor = MaterialTheme.colorScheme.onPrimary
                                 ),
                                 shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 9.dp)
                             ) {
                                 Text(
-                                    if (promptText.isBlank()) "Use Global/Default" else "Save Chat",
-                                    fontSize = 12.5.sp,
-                                    fontWeight = FontWeight.SemiBold
+                                    if (promptText.isBlank()) "Use Global" else "Save",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         }

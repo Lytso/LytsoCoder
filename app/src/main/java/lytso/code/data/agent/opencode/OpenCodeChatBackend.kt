@@ -814,7 +814,7 @@ class OpenCodeChatBackend(
                         lytso.code.data.context.GlobalContext.copyChatSystemPrompt(id, newId)
                         withContextMain {
                             lytso.code.ui.components.AppToastHelper.showToast(
-                                "Branched conversation",
+                                "Branched conversation · inherited history & chat prompt",
                                 lytso.code.ui.components.ChatToastType.SUCCESS
                             )
                             selectConversation(newId)

@@ -182,6 +182,35 @@ object FileExplorerApi {
         }
     }
 
+    suspend fun customRoots(): List<Pair<String, String>> {
+        val (code, o) = get("/api/fs/custom-roots")
+        if (code != 200 || o == null) return emptyList()
+        val arr = o.optJSONArray("roots") ?: JSONArray()
+        return (0 until arr.length()).map {
+            val r = arr.getJSONObject(it)
+            r.optString("name") to r.optString("path")
+        }
+    }
+
+    suspend fun addCustomRoot(name: String, path: String): FsResult =
+        post("/api/fs/custom-roots", JSONObject().put("name", name).put("path", path)).let { (c, o) -> simple(c, o) }
+
+    suspend fun removeCustomRoot(path: String): FsResult = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder()
+                .url("$base/api/fs/custom-roots")
+                .delete(JSONObject().put("path", path).toString().toRequestBody(JSON))
+                .build()
+            client.newCall(req).execute().use { resp ->
+                val raw = resp.body?.string()
+                val o = runCatching { JSONObject(raw ?: "") }.getOrNull()
+                simple(resp.code, o)
+            }
+        } catch (e: Exception) {
+            FsResult(false, error = e.message ?: "Bridge unreachable")
+        }
+    }
+
     suspend fun stat(path: String): Result<ExplorerStat> {
         val (code, o) = get("/api/fs/stat?path=${enc(path)}")
         if (code != 200 || o == null || !o.optBoolean("success")) return Result.failure(Exception(o?.err(code) ?: "Details unavailable"))
