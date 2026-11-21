@@ -1,5 +1,7 @@
 name: Build & Publish Release
 
+# @ItsLytso — the arm64 and x86_64 release APKs are built in parallel (two runners at once), then one small job
+# publishes both. Wall time = the slower build, not arm64 + x86_64 one after the other.
 on:
   push:
     tags:
@@ -9,10 +11,21 @@ on:
 permissions:
   contents: write
 
-jobs:
-  build-and-release:
-    runs-on: ubuntu-latest
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.console=plain
+
+jobs:
+  build:
+    name: Release APK (${{ matrix.abi }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        abi: [arm64, x86_64]
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -36,20 +49,24 @@ jobs:
         with:
           go-version-file: 'agy_ide_bridge/go.mod'
 
+      - name: Tune Gradle for CI
+        run: |
+          mkdir -p ~/.gradle
+          cat >> ~/.gradle/gradle.properties <<'PROPS'
+          org.gradle.jvmargs=-Xmx6g -XX:+UseParallelGC -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
+          kotlin.daemon.jvmargs=-Xmx4g -XX:+UseParallelGC
+          PROPS
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          add-job-summary: never
 
       - name: Parse version.json
         id: version
         run: |
           VERSION_NAME=$(python3 -c "import json; print(json.load(open('version.json')).get('version_name', '1.0.0'))")
-          VERSION_CODE=$(python3 -c "import json; print(json.load(open('version.json')).get('version_code', 1))")
-          CHANGELOG=$(python3 -c "import json; cl = json.load(open('version.json')).get('changelog', ''); print('\n'.join(cl) if isinstance(cl, list) else cl)")
           echo "tag=v${VERSION_NAME}" >> $GITHUB_OUTPUT
-          echo "name=v${VERSION_NAME}" >> $GITHUB_OUTPUT
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Restore Keystore from Secret
         run: |
@@ -59,37 +76,57 @@ jobs:
           fi
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
 
-      - name: Verify Keystore
-        env:
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD || '123456' }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS || 'lytsocoder' }}
-        run: keytool -list -v -keystore app/release.jks -alias "$RELEASE_KEY_ALIAS" -storepass "$RELEASE_STORE_PASSWORD" | head -n 25
-
-      - name: Build Release APKs
+      - name: Build Release APK
         env:
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD || '123456' }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS || 'lytsocoder' }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD || '123456' }}
         run: |
           chmod +x gradlew scripts/build_all_apks.sh
-          ./scripts/build_all_apks.sh --release
+          # the x86_64 bridge links through the Android NDK's clang, which the runner has (ANDROID_NDK_HOME)
+          if [ "${{ matrix.abi }}" = "x86_64" ]; then ./scripts/build_all_apks.sh --release --x86_64; else ./scripts/build_all_apks.sh --release; fi
 
-      # R8 mapping of the arm64 APK, to decode its crash stack traces (retrace). The x86_64 build below
-      # writes the same path, so copy it now.
-      - name: Save arm64 R8 mapping
-        run: zip -j "output/LytsoCoder-${{ steps.version.outputs.tag }}-mapping.zip" app/build/outputs/mapping/release/mapping.txt
+      # R8 mapping of this build, to decode its crash stack traces (retrace)
+      - name: Save R8 mapping
+        run: |
+          SUFFIX=""
+          if [ "${{ matrix.abi }}" = "x86_64" ]; then SUFFIX="-x86_64"; fi
+          zip -j "output/LytsoCoder-${{ steps.version.outputs.tag }}${SUFFIX}-mapping.zip" app/build/outputs/mapping/release/mapping.txt
 
-      # LytsoCoder-v<version>-x86_64.apk, for x86_64 devices (emulators, Intel/AMD Chromebooks); the x86_64 app's updater
-      # downloads this one. Its bridge links through the Android NDK's clang, which the runner has (ANDROID_NDK_HOME).
-      - name: Build x86_64 Release APK
-        env:
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD || '123456' }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS || 'lytsocoder' }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD || '123456' }}
-        run: ./scripts/build_all_apks.sh --release --x86_64
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.abi }}
+          path: output/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
 
-      - name: Save x86_64 R8 mapping
-        run: zip -j "output/LytsoCoder-${{ steps.version.outputs.tag }}-x86_64-mapping.zip" app/build/outputs/mapping/release/mapping.txt
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Parse version.json
+        id: version
+        run: |
+          VERSION_NAME=$(python3 -c "import json; print(json.load(open('version.json')).get('version_name', '1.0.0'))")
+          CHANGELOG=$(python3 -c "import json; cl = json.load(open('version.json')).get('changelog', ''); print('\n'.join(cl) if isinstance(cl, list) else cl)")
+          echo "tag=v${VERSION_NAME}" >> $GITHUB_OUTPUT
+          echo "name=v${VERSION_NAME}" >> $GITHUB_OUTPUT
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Download both builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: output
+          merge-multiple: true
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2

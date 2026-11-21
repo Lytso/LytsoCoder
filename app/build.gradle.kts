@@ -248,6 +248,12 @@ val buildAgyIdeBridge = tasks.register<Exec>("buildAgyIdeBridge") {
   }
 
   workingDir = bridgeSourceDir.asFile
+  // Declared, so Gradle skips the Go build when neither the bridge sources nor the CPU changed, and can take the
+  // binary from its build cache (a CI run that only touches the app no longer rebuilds the bridge).
+  inputs.dir(bridgeSourceDir).withPathSensitivity(PathSensitivity.RELATIVE)
+  inputs.property("goarch", if (isX86) "amd64" else "arm64")
+  outputs.file(rawFile)
+  outputs.cacheIf { true }
   environment("GOOS", "android")
   environment("GOARCH", if (isX86) "amd64" else "arm64")
   if (isX86) {
@@ -259,6 +265,7 @@ val buildAgyIdeBridge = tasks.register<Exec>("buildAgyIdeBridge") {
       (sdkDir.resolve("ndk").listFiles()?.sortedByDescending { it.name } ?: emptyList())
     val clang = ndkRoots.map { File(it, "toolchains/llvm/prebuilt/$host/bin/x86_64-linux-android24-clang") }.firstOrNull { it.exists() }
       ?: throw GradleException("The x86_64 build needs the Android NDK (Go links the bridge with its clang): install one in $sdkDir/ndk or set ANDROID_NDK_HOME")
+    inputs.property("cgoCompiler", clang.name)
     environment("CGO_ENABLED", "1")
     environment("CC", clang.absolutePath)
   } else {

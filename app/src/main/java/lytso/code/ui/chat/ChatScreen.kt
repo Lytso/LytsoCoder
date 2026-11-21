@@ -751,15 +751,32 @@ fun ChatScreen(
         viewModel.getDraft(currentConv?.id ?: "new").let { TextFieldState(it.text, it.selection) }
     }
 
+    // Text put back in the input by "Edit" / "Rewind & resend". Editing the first message of a chat swaps the open chat for a
+    // fresh one, and that switch used to load the new chat's (empty) draft over the restored text: carry it across instead.
+    var restoredInput by remember { mutableStateOf<Pair<String, Long>?>(null) }
+    fun restoreInput(text: String) {
+        inputState.setTextAndPlaceCursorAtEnd(text)
+        restoredInput = text to System.currentTimeMillis()
+    }
+
     LaunchedEffect(currentConv?.id) {
         val newKey = currentConv?.id ?: "new"
         if (newKey != activeConversationKey) {
-            viewModel.setDraft(activeConversationKey, TextFieldValue(inputState.text.toString(), inputState.selection))
+            val carried = restoredInput
+                ?.takeIf { System.currentTimeMillis() - it.second < 20_000 && inputState.text.toString() == it.first }
+                ?.first
+            restoredInput = null
+            if (carried != null) viewModel.clearDraft(activeConversationKey)
+            else viewModel.setDraft(activeConversationKey, TextFieldValue(inputState.text.toString(), inputState.selection))
             activeConversationKey = newKey
-            val draft = viewModel.getDraft(newKey)
-            inputState.edit {
-                replace(0, length, draft.text)
-                selection = draft.selection
+            if (carried != null) {
+                inputState.setTextAndPlaceCursorAtEnd(carried)
+            } else {
+                val draft = viewModel.getDraft(newKey)
+                inputState.edit {
+                    replace(0, length, draft.text)
+                    selection = draft.selection
+                }
             }
             ToolCallExpansionCache.setChat(newKey)
             CodeBlockExpansionCache.setChat(newKey)
@@ -2318,7 +2335,7 @@ fun ChatScreen(
                                                         pendingMessageAction = PendingMessageAction(MessageActionType.EDIT, targetMsg)
                                                     } else {
                                                         viewModel.revertAndEditLastUserMessage(targetMsg) { restoredText ->
-                                                            inputState.setTextAndPlaceCursorAtEnd(restoredText)
+                                                            restoreInput(restoredText)
                                                         }
                                                     }
                                                 },
@@ -3371,7 +3388,7 @@ fun ChatScreen(
                 onRestoreChat = if (isReadOnlyChat) null else {
                     {
                         viewModel.revertAndEditLastUserMessage(msg) { restoredText ->
-                            inputState.setTextAndPlaceCursorAtEnd(restoredText)
+                            restoreInput(restoredText)
                         }
                     }
                 },
@@ -3445,11 +3462,11 @@ fun ChatScreen(
                         val overrideDraft = action.overrideDraftText?.takeIf { it.isNotBlank() }
                         if ((isClaudeChat || isOpenCodeChat || isCodexChat) && action.type == MessageActionType.EDIT) {
                             viewModel.editClaudeMessage(target, restoreCode = false) { restoredText ->
-                                inputState.setTextAndPlaceCursorAtEnd(overrideDraft ?: restoredText)
+                                restoreInput(overrideDraft ?: restoredText)
                             }
                         } else if (action.type == MessageActionType.EDIT) {
                             viewModel.revertAndEditLastUserMessage(target) { restoredText ->
-                                inputState.setTextAndPlaceCursorAtEnd(overrideDraft ?: restoredText)
+                                restoreInput(overrideDraft ?: restoredText)
                             }
                         } else {
                             viewModel.retryMessage(target.id)
@@ -3826,7 +3843,7 @@ fun ChatScreen(
                                 )
                             } else {
                                 viewModel.revertAndEditLastUserMessage(targetMsg) { restoredText ->
-                                    inputState.setTextAndPlaceCursorAtEnd(draftOverride ?: restoredText)
+                                    restoreInput(draftOverride ?: restoredText)
                                 }
                             }
                         },

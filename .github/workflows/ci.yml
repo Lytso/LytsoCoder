@@ -1,57 +1,114 @@
 name: CI Build & Test
 
+# @ItsLytso — parallel pipeline: Go tests, Android unit tests and both debug APKs (arm64, x86_64) run as separate
+# jobs at the same time, so the run takes as long as the slowest one instead of the sum of all.
 on:
   push:
     branches:
       - standalone
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'user_docs/**'
+      - 'LICENSE'
+      - 'NOTICE'
   pull_request:
     branches:
       - standalone
   workflow_dispatch:
 
+# a newer push to the same ref makes the older, now useless, run stop
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.console=plain
+
 jobs:
-  build-and-test:
+  go-tests:
+    name: Go bridge tests
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Fetch the termux-am submodule
-        run: git submodule update --init --depth 1 termux-am
-
-      - name: Set up Java 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'agy_ide_bridge/go.mod'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
       - name: Run Go bridge tests
         run: |
           cp version.json agy_ide_bridge/pkg/buildinfo/version.json
           cd agy_ide_bridge && go test ./...
 
-      - name: Run Android unit tests and build Debug APKs
+  unit-tests:
+    name: Android unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the changelog is generated from the git history of version.json
+      - name: Fetch the termux-am submodule
+        run: git submodule update --init --depth 1 termux-am
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'agy_ide_bridge/go.mod'
+      - name: Tune Gradle for CI
+        run: |
+          mkdir -p ~/.gradle
+          cat >> ~/.gradle/gradle.properties <<'PROPS'
+          org.gradle.jvmargs=-Xmx6g -XX:+UseParallelGC -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
+          kotlin.daemon.jvmargs=-Xmx4g -XX:+UseParallelGC
+          PROPS
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          add-job-summary: never
+      - name: Run Android unit tests
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest
+
+  debug-apk:
+    name: Debug APK (${{ matrix.abi }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64, x86_64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch the termux-am submodule
+        run: git submodule update --init --depth 1 termux-am
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'agy_ide_bridge/go.mod'
+      - name: Tune Gradle for CI
+        run: |
+          mkdir -p ~/.gradle
+          cat >> ~/.gradle/gradle.properties <<'PROPS'
+          org.gradle.jvmargs=-Xmx6g -XX:+UseParallelGC -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
+          kotlin.daemon.jvmargs=-Xmx4g -XX:+UseParallelGC
+          PROPS
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          add-job-summary: never
+      - name: Build Debug APK
         run: |
           chmod +x gradlew scripts/build_all_apks.sh
-          ./gradlew :app:testDebugUnitTest
-          ./scripts/build_all_apks.sh
-          ./scripts/build_all_apks.sh --x86_64
-
+          if [ "${{ matrix.abi }}" = "x86_64" ]; then ./scripts/build_all_apks.sh --x86_64; else ./scripts/build_all_apks.sh; fi
       - name: Upload Debug APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LytsoCoder-debug-apk
+          name: LytsoCoder-debug-apk-${{ matrix.abi }}
           path: output/*.apk
           if-no-files-found: error
           retention-days: 14
+          compression-level: 0
