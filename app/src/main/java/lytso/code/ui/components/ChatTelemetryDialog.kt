@@ -168,7 +168,14 @@ fun ChatTelemetryDialog(
                             TelemetryRow(label = "Model Responses", value = "$assistantMessagesCount responses")
                             TelemetryRow(label = "Tools Executed", value = "$toolsExecutedCount tools")
                             TelemetryRow(label = "Active Context Summary", value = if (!conversation?.summary.isNullOrBlank()) "Active" else "None")
-                            TelemetryRow(label = "Custom System Prompt", value = if (!conversation?.customSystemPrompt.isNullOrBlank()) "Configured" else "Default")
+                            val perChatActive = !(conversation?.customSystemPrompt ?: lytso.code.data.context.GlobalContext.chatSystemPrompt(conversation?.id)).isNullOrBlank()
+                            val globalActive = !lytso.code.data.context.GlobalContext.globalSystemPrompt.value.isNullOrBlank()
+                            val promptStatusLabel = when {
+                                perChatActive -> "Per-chat override"
+                                globalActive -> "Global default"
+                                else -> "Agent default"
+                            }
+                            TelemetryRow(label = "System Prompt", value = promptStatusLabel)
                         }
                     }
 
@@ -200,8 +207,14 @@ fun ChatTelemetryDialog(
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
+                                val perChatActive2 = !(conversation?.customSystemPrompt ?: lytso.code.data.context.GlobalContext.chatSystemPrompt(conversation?.id)).isNullOrBlank()
+                                val globalActive2 = !lytso.code.data.context.GlobalContext.globalSystemPrompt.value.isNullOrBlank()
                                 Text(
-                                    text = if (!conversation?.customSystemPrompt.isNullOrBlank()) "Custom instructions active" else "Using default system instruction",
+                                    text = when {
+                                        perChatActive2 -> "Per-chat override active"
+                                        globalActive2 -> "Using Global system prompt"
+                                        else -> "Using agent default system instruction"
+                                    },
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

@@ -1965,12 +1965,19 @@ fun ChatScreen(
                                 )
                             }
                         }
-                        val hasCustomSysPrompt = !(currentConv?.customSystemPrompt ?: lytso.code.data.context.GlobalContext.chatSystemPrompt(currentConv?.id)).isNullOrBlank()
+                        val globalSysPrompt by lytso.code.data.context.GlobalContext.globalSystemPrompt.collectAsState()
+                        val perChatSysPrompt = currentConv?.customSystemPrompt ?: lytso.code.data.context.GlobalContext.chatSystemPrompt(currentConv?.id)
+                        val hasPerChatSysPrompt = !perChatSysPrompt.isNullOrBlank()
+                        val hasGlobalSysPrompt = !globalSysPrompt.isNullOrBlank()
                         IconButton(onClick = { showCustomSystemPromptDialog = true }) {
                             Icon(
                                 imageVector = Icons.Outlined.Psychology,
                                 contentDescription = "Edit Chat System Prompt",
-                                tint = if (hasCustomSysPrompt) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                                tint = when {
+                                    hasPerChatSysPrompt -> ClaudeTerracotta
+                                    hasGlobalSysPrompt -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                                }
                             )
                         }
                         if (isDevModeEnabled) {
@@ -3776,11 +3783,14 @@ fun ChatScreen(
     }
 
     if (showCustomSystemPromptDialog) {
+        val globalSysPrompt by lytso.code.data.context.GlobalContext.globalSystemPrompt.collectAsState()
         lytso.code.ui.components.CustomSystemPromptDialog(
             initialPrompt = currentConv?.customSystemPrompt ?: lytso.code.data.context.GlobalContext.chatSystemPrompt(currentConv?.id),
+            globalSystemPrompt = globalSysPrompt,
             conversationId = currentConv?.id,
             workspaceDir = currentConv?.workspaceUri,
             onSavePrompt = { prompt -> viewModel.updateCustomSystemPrompt(prompt) },
+            onSaveGlobalPrompt = { prompt -> viewModel.updateGlobalSystemPrompt(prompt, clearCurrentChatOverride = true) },
             onDismiss = { showCustomSystemPromptDialog = false }
         )
     }

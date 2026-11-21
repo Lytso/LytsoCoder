@@ -114,7 +114,11 @@ object JarvisDriver {
             AgentKind.AGY -> if (screenFree) vm.agyBackend.sendMessage(text) else {
                 val enum = AgyHubClient.resolveModelEnum(vm.agyBackend.modelOfChat(id))
                 val isJarvis = JarvisPreferences.isJarvisChat(id)
-                val customSysPrompt = lytso.code.data.context.GlobalContext.chatSystemPrompt(id)
+                val customSysPrompt = if (isJarvis) {
+                    lytso.code.data.context.GlobalContext.chatSystemPrompt(id)
+                } else {
+                    lytso.code.data.context.GlobalContext.effectiveSystemPrompt(id)
+                }
                 hub.sendUserPrompt(
                     cascadeId = id,
                     text = text,

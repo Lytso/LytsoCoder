@@ -1320,7 +1320,28 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _currentConversation.value = updated
         _conversations.value = _conversations.value.map { if (it.id == updated.id) updated else it }
         lytso.code.ui.components.AppToastHelper.showToast(
-            if (cleaned == null) "Custom system prompt reset to default" else "Chat system prompt updated",
+            if (cleaned == null) "Per-chat override cleared" else "Saved for this chat",
+            lytso.code.ui.components.ChatToastType.SUCCESS
+        )
+    }
+
+    fun updateGlobalSystemPrompt(prompt: String?, clearCurrentChatOverride: Boolean = true) {
+        val cleaned = if (prompt.isNullOrBlank()) null else prompt.trim()
+        lytso.code.data.context.GlobalContext.setGlobalSystemPrompt(cleaned)
+        if (clearCurrentChatOverride) {
+            _currentConversation.value?.let { conv ->
+                lytso.code.data.context.GlobalContext.setChatSystemPrompt(conv.id, null)
+                val updated = conv.copy(customSystemPrompt = null)
+                _currentConversation.value = updated
+                _conversations.value = _conversations.value.map { if (it.id == updated.id) updated else it }
+            }
+        }
+        lytso.code.ui.components.AppToastHelper.showToast(
+            if (cleaned == null) {
+                "Global system prompt cleared (using agent default)"
+            } else {
+                "Saved as Global System Prompt (other chats with custom prompts keep theirs)"
+            },
             lytso.code.ui.components.ChatToastType.SUCCESS
         )
     }

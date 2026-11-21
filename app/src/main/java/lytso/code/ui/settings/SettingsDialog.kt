@@ -113,6 +113,7 @@ enum class SettingsSection(val title: String, val subtitle: String) {
     /** One Codex page (which one: the dialog's codexPage). */
     CODEX_PAGE("Codex", "Account & CLI, usage limits, permissions, MCP"),
     AGENTS("Agents", "Run Antigravity, Claude Code, OpenCode, Codex or several"),
+    GLOBAL_SYSTEM_PROMPT("System prompt", "Default persona & system instructions for every chat (override per chat anytime)"),
     GLOBAL_CONTEXT("Global context", "What every chat is told about this app, and your own instructions"),
     AGENT_MEMORY("Agent memory & history", "Memories every agent keeps across chats, and past chats they can look up"),
     AGENT_HISTORY("Saved chats", "The chat history the agents can look up: read, edit or remove it"),
@@ -165,7 +166,7 @@ enum class SettingsSection(val title: String, val subtitle: String) {
         CODEX_PAGE -> CODEX
         TERMUX_API, X11_DESKTOP -> TERMUX_SUPPORT
         REA_GROUPS -> REA
-        GLOBAL_CONTEXT, AGENT_MEMORY, EGM -> AGENTS
+        GLOBAL_SYSTEM_PROMPT, GLOBAL_CONTEXT, AGENT_MEMORY, EGM -> AGENTS
         AGENT_HISTORY -> AGENT_MEMORY
         CHANGELOG -> ABOUT
         else -> if (jarvisPage != null) JARVIS else MAIN
@@ -641,11 +642,17 @@ fun SettingsDialog(
                         enabled = enabledAgents,
                         isApplying = isApplyingAgents,
                         onApply = onApplyAgents,
+                        onOpenGlobalSystemPrompt = { currentSection = SettingsSection.GLOBAL_SYSTEM_PROMPT },
                         onOpenGlobalContext = { currentSection = SettingsSection.GLOBAL_CONTEXT },
                         onOpenAgentMemory = { currentSection = SettingsSection.AGENT_MEMORY },
                         onOpenEgm = { currentSection = SettingsSection.EGM }
                     )
-                    SettingsSection.GLOBAL_CONTEXT -> GlobalContextScreen()
+                    SettingsSection.GLOBAL_SYSTEM_PROMPT -> GlobalSystemPromptScreen(
+                        onOpenGlobalContext = { currentSection = SettingsSection.GLOBAL_CONTEXT }
+                    )
+                    SettingsSection.GLOBAL_CONTEXT -> GlobalContextScreen(
+                        onOpenGlobalSystemPrompt = { currentSection = SettingsSection.GLOBAL_SYSTEM_PROMPT }
+                    )
                     SettingsSection.EGM -> EgmScreen(cardBg = cardBg, cardBorder = cardBorder)
                     SettingsSection.AGENT_MEMORY -> AgentMemoryScreen(onOpenHistory = { currentSection = SettingsSection.AGENT_HISTORY })
                     SettingsSection.AGENT_HISTORY -> AgentHistoryScreen()

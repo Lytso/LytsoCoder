@@ -63,7 +63,7 @@ fun GlobalContextEntryRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
  * user's own entries, each sent in the first message of a chat or with every message, and to Jarvis only when allowed.
  */
 @Composable
-fun GlobalContextScreen() {
+fun GlobalContextScreen(onOpenGlobalSystemPrompt: (() -> Unit)? = null) {
     val builtInOn by GlobalContext.builtInEnabled.collectAsState()
     val builtInCustom by GlobalContext.builtInCustomText.collectAsState()
     val entries by GlobalContext.entries.collectAsState()
@@ -75,10 +75,33 @@ fun GlobalContextScreen() {
 
     Column(Modifier.fillMaxSize().bouncyVerticalScroll(rememberScrollState()).padding(16.dp)) {
         Text(
-            "Added hidden in front of your messages, for every agent (the chat does not show it). First-message context goes " +
-                "once per chat, and again only when it changes; every-message entries go with each message.",
+            "Added hidden in front of your user messages (role: user), for every agent (the chat does not show it). " +
+                "First-message context goes once per chat, and again only when it changes; every-message entries go with each message.",
             fontSize = 12.5.sp, lineHeight = 17.sp, color = muted
         )
+        if (onOpenGlobalSystemPrompt != null) {
+            Spacer(Modifier.height(10.dp))
+            Surface(
+                onClick = onOpenGlobalSystemPrompt,
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Want to replace the agent's identity (<identity>)?", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Global context adds notes to your messages. To replace the default persona for all chats, set Global system prompt instead.",
+                            fontSize = 11.5.sp,
+                            lineHeight = 15.5.sp,
+                            color = muted
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = muted)
+                }
+            }
+        }
         Spacer(Modifier.height(16.dp))
 
         // ----- built-in -----

@@ -34,15 +34,19 @@ import lytso.code.theme.ClaudeTerracotta
 @Composable
 fun CustomSystemPromptDialog(
     initialPrompt: String?,
+    globalSystemPrompt: String? = null,
     activeSystemPrompt: String? = null,
     conversationId: String? = null,
     workspaceDir: String? = null,
     onSavePrompt: (String?) -> Unit,
+    onSaveGlobalPrompt: ((String?) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    var selectedTab by remember { mutableStateOf(if (!initialPrompt.isNullOrBlank()) 1 else 0) }
-    var promptText by remember { mutableStateOf(initialPrompt ?: "") }
+    val perChatTrimmed = initialPrompt?.trim()?.takeIf { it.isNotBlank() }
+    val globalTrimmed = globalSystemPrompt?.trim()?.takeIf { it.isNotBlank() }
+    var selectedTab by remember { mutableStateOf(if (perChatTrimmed != null) 1 else 0) }
+    var promptText by remember { mutableStateOf(perChatTrimmed ?: "") }
     var dynamicServerPrompt by remember { mutableStateOf<String?>(activeSystemPrompt) }
 
     LaunchedEffect(conversationId, workspaceDir) {
@@ -157,6 +161,13 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                     .fillMaxSize()
                     .padding(16.dp)
             ) {
+                val activeSourceLabel = when {
+                    perChatTrimmed != null -> "Per-chat override (this chat only)"
+                    globalTrimmed != null -> "Global system prompt (Settings → Agents)"
+                    else -> "Agent default (<identity>)"
+                }
+                val shownActivePrompt = perChatTrimmed ?: globalTrimmed ?: defaultSystemPrompt
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -170,21 +181,29 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Chat System Prompt",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Column {
+                            Text(
+                                text = "Chat System Prompt",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Active: $activeSourceLabel",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (perChatTrimmed != null || globalTrimmed != null) ClaudeTerracotta else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     if (selectedTab == 0) {
                         IconButton(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("LytsoCoder System Prompt", defaultSystemPrompt)
+                                val clip = ClipData.newPlainText("LytsoCoder System Prompt", shownActivePrompt)
                                 clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, "System prompt copied to clipboard", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Active prompt copied to clipboard", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.size(32.dp)
                         ) {
@@ -233,7 +252,7 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                 Spacer(modifier = Modifier.height(10.dp))
 
                 if (selectedTab == 0) {
-                    // Full compiled Antigravity System Prompt
+                    // Currently active prompt for this chat (Per-chat -> Global -> Agent Default)
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -250,7 +269,7 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                                     .verticalScroll(rememberScrollState())
                             ) {
                                 Text(
-                                    text = defaultSystemPrompt,
+                                    text = shownActivePrompt,
                                     fontSize = 11.5.sp,
                                     lineHeight = 16.sp,
                                     fontFamily = FontFamily.Monospace,
@@ -261,12 +280,25 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                     }
                 } else {
                     // Custom override prompt
+                    Text(
+                        text = "Replaces the agent's default <identity> (role: system). Leave empty to inherit your Global System Prompt" +
+                            (if (globalTrimmed != null) " (active)" else " (none set → uses agent default)") +
+                            ". Other chats with their own prompts always keep theirs.",
+                        fontSize = 11.5.sp,
+                        lineHeight = 15.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
                     OutlinedTextField(
                         value = promptText,
                         onValueChange = { promptText = it },
                         placeholder = {
                             Text(
-                                text = "e.g. You are an expert Android Kotlin engineer. Write clean Compose code with 0 bugs...",
+                                text = if (globalTrimmed != null) {
+                                    "Empty = inheriting Global System Prompt.\nWrite here to override ONLY this chat..."
+                                } else {
+                                    "e.g. You are an expert Android Kotlin engineer. Write clean Compose code with 0 bugs..."
+                                },
                                 fontSize = 12.5.sp,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                             )
@@ -295,7 +327,10 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (selectedTab == 1 && promptText.isNotBlank()) {
-                        TextButton(onClick = { promptText = "" }) {
+                        TextButton(
+                            onClick = { promptText = "" },
+                            contentPadding = PaddingValues(horizontal = 6.dp)
+                        ) {
                             Icon(
                                 imageVector = Icons.Outlined.RestartAlt,
                                 contentDescription = "Clear",
@@ -303,22 +338,21 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                                 tint = MaterialTheme.colorScheme.error
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Reset", fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error)
+                            Text("Clear", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                         }
                     } else {
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                     }
 
-                    Row {
-                        TextButton(onClick = onDismiss) {
-                            Text("Close", fontSize = 13.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                            Text("Close", fontSize = 12.5.sp)
                         }
                         if (selectedTab == 0) {
-                            Spacer(modifier = Modifier.width(6.dp))
                             Button(
                                 onClick = {
                                     if (promptText.isBlank()) {
-                                        promptText = defaultSystemPrompt.trim()
+                                        promptText = shownActivePrompt.trim()
                                     }
                                     selectedTab = 1
                                 },
@@ -330,16 +364,32 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                                 Text("Edit as override", fontSize = 12.5.sp, color = Color.White)
                             }
                         } else if (selectedTab == 1) {
-                            Spacer(modifier = Modifier.width(6.dp))
+                            if (onSaveGlobalPrompt != null && promptText.isNotBlank()) {
+                                OutlinedButton(
+                                    onClick = {
+                                        onSaveGlobalPrompt(promptText.trim())
+                                        onDismiss()
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                                ) {
+                                    Text("Set Global", fontSize = 12.sp)
+                                }
+                            }
                             Button(
                                 onClick = {
                                     onSavePrompt(promptText.ifBlank { null })
                                     onDismiss()
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
-                                shape = RoundedCornerShape(8.dp)
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                             ) {
-                                Text("Save Prompt", fontSize = 13.sp, color = Color.White)
+                                Text(
+                                    if (promptText.isBlank()) "Use Global/Default" else "Save Chat",
+                                    fontSize = 12.5.sp,
+                                    color = Color.White
+                                )
                             }
                         }
                     }

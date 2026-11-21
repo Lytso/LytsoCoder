@@ -48,6 +48,10 @@ object GlobalContext {
     private val _builtInCustomText = MutableStateFlow<String?>(null)
     val builtInCustomText: StateFlow<String?> = _builtInCustomText.asStateFlow()
 
+    private val _globalSystemPrompt = MutableStateFlow<String?>(null)
+    /** Default system prompt applied to every chat that does not define its own per-chat override. */
+    val globalSystemPrompt: StateFlow<String?> = _globalSystemPrompt.asStateFlow()
+
     private val _entries = MutableStateFlow<List<Entry>>(emptyList())
     val entries: StateFlow<List<Entry>> = _entries.asStateFlow()
 
@@ -66,6 +70,7 @@ object GlobalContext {
         lytso.code.data.render.RenderBundle.init(context)
         _builtInEnabled.value = p.getBoolean("builtin_enabled", true)
         _builtInCustomText.value = p.getString("builtin_custom_text", null)?.takeIf { it.isNotBlank() }
+        _globalSystemPrompt.value = p.getString("global_system_prompt", null)?.trim()?.takeIf { it.isNotBlank() }
         _entries.value = runCatching {
             val arr = JSONArray(p.getString("entries", "[]"))
             (0 until arr.length()).map { i ->
@@ -105,6 +110,7 @@ object GlobalContext {
         runsOnPhoneTestOverride = runsOnPhoneOverride
         _builtInEnabled.value = true
         _builtInCustomText.value = null
+        _globalSystemPrompt.value = null
         _entries.value = emptyList()
         synchronized(sent) { sent.clear() }
         synchronized(chatPrompts) { chatPrompts.clear() }
@@ -128,6 +134,21 @@ object GlobalContext {
     }
 
     fun resetBuiltInText() = setBuiltInText(null)
+
+    fun setGlobalSystemPrompt(prompt: String?) {
+        val cleaned = prompt?.trim()?.takeIf { it.isNotBlank() }
+        _globalSystemPrompt.value = cleaned
+        sp?.edit()?.apply {
+            if (cleaned == null) remove("global_system_prompt") else putString("global_system_prompt", cleaned)
+        }?.apply()
+    }
+
+    /** Precedence: per-chat override -> [convOverride] -> [globalSystemPrompt] -> null (agent default). */
+    fun effectiveSystemPrompt(chatId: String?, convOverride: String? = null): String? {
+        chatSystemPrompt(chatId)?.takeIf { it.isNotBlank() }?.let { return it }
+        convOverride?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        return _globalSystemPrompt.value?.takeIf { it.isNotBlank() }
+    }
 
     fun chatSystemPrompt(chatId: String?): String? {
         if (chatId.isNullOrBlank()) return null
@@ -239,10 +260,10 @@ object GlobalContext {
         return parts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
     }
 
-    /** What every message of a normal chat carries (including any per-chat custom system prompt when [includeChatSystemPrompt] is true), or null. */
+    /** What every message of a normal chat carries (including per-chat or global custom system prompt when [includeChatSystemPrompt] is true), or null. */
     fun everyMessageBody(chatId: String? = null, includeChatSystemPrompt: Boolean = true): String? {
         val blocks = mutableListOf<String>()
-        val chatPrompt = if (includeChatSystemPrompt) chatSystemPrompt(chatId) else null
+        val chatPrompt = if (includeChatSystemPrompt) effectiveSystemPrompt(chatId) else null
         if (!chatPrompt.isNullOrBlank()) {
             blocks += "[Chat system prompt, set by the user for this chat. It REPLACES your default persona, style and system instructions wherever they differ (keep only your tool and safety rules). Follow it strictly in every reply.]\n$chatPrompt"
         }

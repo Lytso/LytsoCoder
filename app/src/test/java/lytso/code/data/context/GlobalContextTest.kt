@@ -129,4 +129,48 @@ class GlobalContextTest {
         assertTrue(wrappedFallback.contains("specialized reverse-engineering persona"))
         assertTrue(wrappedFallback.contains("Keep replies brief."))
     }
+
+    @Test
+    fun globalSystemPromptPrecedenceAndPerChatIsolation() {
+        GlobalContext.setBuiltInEnabled(false)
+
+        // 1. Neither per-chat nor global -> null (agent default).
+        assertNull(GlobalContext.effectiveSystemPrompt("chat-new"))
+
+        // 2. Set global system prompt -> applies to chats without per-chat override.
+        GlobalContext.setGlobalSystemPrompt("You are the Global Assistant.")
+        assertEquals("You are the Global Assistant.", GlobalContext.effectiveSystemPrompt("chat-new"))
+
+        // 3. Per-chat override on another chat always wins and stays untouched when global changes.
+        GlobalContext.setChatSystemPrompt("chat-custom", "You are a Kotlin Specialist.")
+        assertEquals("You are a Kotlin Specialist.", GlobalContext.effectiveSystemPrompt("chat-custom"))
+
+        GlobalContext.setGlobalSystemPrompt("You are the Updated Global Assistant.")
+        assertEquals("You are the Updated Global Assistant.", GlobalContext.effectiveSystemPrompt("chat-new"))
+        assertEquals("You are a Kotlin Specialist.", GlobalContext.effectiveSystemPrompt("chat-custom"))
+
+        // 4. Clearing a chat's override falls back to global; clearing global falls back to null.
+        GlobalContext.deleteChatSystemPrompt("chat-custom")
+        assertEquals("You are the Updated Global Assistant.", GlobalContext.effectiveSystemPrompt("chat-custom"))
+
+        // 5. includeChatSystemPrompt = false skips global too (native AGY CustomAgent handles it).
+        val (nativeWrapped, _) = GlobalContext.wrap(
+            chatId = "chat-new",
+            hasEarlierMessages = true,
+            text = "Ping",
+            includeChatSystemPrompt = false
+        )
+        assertEquals("Ping", nativeWrapped)
+
+        val (fallbackWrapped, _) = GlobalContext.wrap(
+            chatId = "chat-new",
+            hasEarlierMessages = true,
+            text = "Ping",
+            includeChatSystemPrompt = true
+        )
+        assertTrue(fallbackWrapped.contains("You are the Updated Global Assistant."))
+
+        GlobalContext.setGlobalSystemPrompt(null)
+        assertNull(GlobalContext.effectiveSystemPrompt("chat-new"))
+    }
 }

@@ -2275,8 +2275,12 @@ class AgyChatBackend(
         refreshQueuedMessages(conv.id)
         backendScope.launch(Dispatchers.IO) {
             val (modelEnum, thinkingBudget, policy) = promptSettings()
-            val customSysPrompt = lytso.code.data.context.GlobalContext.chatSystemPrompt(conv.id) ?: conv.customSystemPrompt
             val isJarvis = lytso.code.data.jarvis.JarvisPreferences.isJarvisChat(conv.id)
+            val customSysPrompt = if (isJarvis) {
+                lytso.code.data.context.GlobalContext.chatSystemPrompt(conv.id) ?: conv.customSystemPrompt
+            } else {
+                lytso.code.data.context.GlobalContext.effectiveSystemPrompt(conv.id, conv.customSystemPrompt)
+            }
             val res = agyHubClient.sendUserPrompt(
                 cascadeId = conv.id,
                 text = entry.text,
@@ -2680,8 +2684,12 @@ class AgyChatBackend(
                     else lytso.code.data.checkpoint.ProjectCheckpoints.beforeTurn(AgentKind.AGY, conv.id, ws, clientMessageId, title)
                 }
 
-                val customSysPrompt = lytso.code.data.context.GlobalContext.chatSystemPrompt(conv.id) ?: conv.customSystemPrompt
                 val isJarvis = lytso.code.data.jarvis.JarvisPreferences.isJarvisChat(conv.id)
+                val customSysPrompt = if (isJarvis) {
+                    lytso.code.data.context.GlobalContext.chatSystemPrompt(conv.id) ?: conv.customSystemPrompt
+                } else {
+                    lytso.code.data.context.GlobalContext.effectiveSystemPrompt(conv.id, conv.customSystemPrompt)
+                }
                 val chatMcpSpecs = activeChatMcpSpecs(isJarvis)
                 var sendRes = agyHubClient.sendUserPrompt(
                     cascadeId = conv.id,

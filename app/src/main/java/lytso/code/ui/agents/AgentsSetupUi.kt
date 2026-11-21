@@ -170,6 +170,7 @@ fun AgentsSettingsPage(
     isApplying: Boolean,
     onApply: (Set<AgentKind>) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenGlobalSystemPrompt: (() -> Unit)? = null,
     onOpenGlobalContext: (() -> Unit)? = null,
     onOpenAgentMemory: (() -> Unit)? = null,
     onOpenEgm: (() -> Unit)? = null
@@ -201,8 +202,12 @@ fun AgentsSettingsPage(
                 Text(if (selected == enabled) "No changes" else "Apply and restart app", fontWeight = FontWeight.SemiBold)
             }
         }
-        if (onOpenGlobalContext != null) {
+        if (onOpenGlobalSystemPrompt != null) {
             Spacer(Modifier.height(24.dp))
+            lytso.code.ui.settings.GlobalSystemPromptEntryRow(onClick = onOpenGlobalSystemPrompt)
+        }
+        if (onOpenGlobalContext != null) {
+            Spacer(Modifier.height(if (onOpenGlobalSystemPrompt != null) 12.dp else 24.dp))
             lytso.code.ui.settings.GlobalContextEntryRow(onClick = onOpenGlobalContext)
         }
         if (onOpenAgentMemory != null) {
