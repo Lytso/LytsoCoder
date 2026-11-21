@@ -74,6 +74,29 @@ class AgyChatBackend(
     val systemConnectionState: StateFlow<lytso.code.data.remote.SystemConnectionState> = agyBridgeService.systemConnectionState
     val hubStatus: StateFlow<lytso.code.data.remote.AgyHubStatus> = agyBridgeService.hubStatus
     val agyHubClient = lytso.code.data.remote.AgyHubClient()
+    var mcpServersProvider: () -> List<lytso.code.domain.model.McpServerState> = { emptyList() }
+
+    fun activeChatMcpSpecs(isJarvis: Boolean): List<exa.language_server_pb.McpServerSpec> {
+        if (isJarvis) return emptyList()
+        return mcpServersProvider().mapNotNull { state ->
+            val spec = state.spec
+            val name = spec?.serverName?.takeIf { it.isNotBlank() } ?: state.name
+            if (!state.isEnabled || spec?.disabled == true || name.equals("jarvis_mcp", ignoreCase = true)) {
+                null
+            } else {
+                exa.language_server_pb.McpServerSpec(
+                    server_name = name,
+                    command = spec?.command ?: "",
+                    args = spec?.args ?: emptyList(),
+                    env = spec?.env ?: emptyMap(),
+                    server_url = spec?.serverUrl ?: "",
+                    headers = spec?.headers ?: emptyMap(),
+                    disabled = false,
+                    cwd = spec?.cwd ?: ""
+                )
+            }
+        }
+    }
     val trajectoryEngine = lytso.code.domain.chat.TrajectoryEngine()
     val speechManager = lytso.code.data.audio.AgyAudioTranscriptionManager(agyHubClient) {
         AuthPreferences.currentHubUrl
@@ -2253,6 +2276,7 @@ class AgyChatBackend(
         backendScope.launch(Dispatchers.IO) {
             val (modelEnum, thinkingBudget, policy) = promptSettings()
             val customSysPrompt = lytso.code.data.context.GlobalContext.chatSystemPrompt(conv.id) ?: conv.customSystemPrompt
+            val isJarvis = lytso.code.data.jarvis.JarvisPreferences.isJarvisChat(conv.id)
             val res = agyHubClient.sendUserPrompt(
                 cascadeId = conv.id,
                 text = entry.text,
@@ -2263,7 +2287,9 @@ class AgyChatBackend(
                 clientMessageId = clientMessageId,
                 rawMedia = entry.media,
                 cloud = conv.isCloud,
-                customSystemPrompt = customSysPrompt
+                customSystemPrompt = customSysPrompt,
+                isJarvis = isJarvis,
+                mcpServers = activeChatMcpSpecs(isJarvis)
             )
             if (res.isSuccess) {
                 agyHubClient.deleteAgentMessage(conv.id, id).onFailure { Log.w("ChatViewModel", "deleteAgentMessage: ${it.message}") }
@@ -2655,6 +2681,8 @@ class AgyChatBackend(
                 }
 
                 val customSysPrompt = lytso.code.data.context.GlobalContext.chatSystemPrompt(conv.id) ?: conv.customSystemPrompt
+                val isJarvis = lytso.code.data.jarvis.JarvisPreferences.isJarvisChat(conv.id)
+                val chatMcpSpecs = activeChatMcpSpecs(isJarvis)
                 var sendRes = agyHubClient.sendUserPrompt(
                     cascadeId = conv.id,
                     text = userPrompt,
@@ -2666,7 +2694,9 @@ class AgyChatBackend(
                     deliveryStrategy = deliveryStrategy,
                     clientMessageId = clientMessageId,
                     cloud = conv.isCloud,
-                    customSystemPrompt = customSysPrompt
+                    customSystemPrompt = customSysPrompt,
+                    isJarvis = isJarvis,
+                    mcpServers = chatMcpSpecs
                 )
 
                 if (sendRes.isFailure) {
@@ -2696,7 +2726,9 @@ class AgyChatBackend(
                                 deliveryStrategy = deliveryStrategy,
                                 clientMessageId = clientMessageId,
                                 cloud = conv.isCloud,
-                                customSystemPrompt = customSysPrompt
+                                customSystemPrompt = customSysPrompt,
+                                isJarvis = isJarvis,
+                                mcpServers = chatMcpSpecs
                             )
                         }
                     }

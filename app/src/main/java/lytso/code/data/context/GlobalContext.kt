@@ -238,10 +238,10 @@ object GlobalContext {
         return parts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
     }
 
-    /** What every message of a normal chat carries (including any per-chat custom system prompt), or null. */
-    fun everyMessageBody(chatId: String? = null): String? {
+    /** What every message of a normal chat carries (including any per-chat custom system prompt when [includeChatSystemPrompt] is true), or null. */
+    fun everyMessageBody(chatId: String? = null, includeChatSystemPrompt: Boolean = true): String? {
         val blocks = mutableListOf<String>()
-        val chatPrompt = chatSystemPrompt(chatId)
+        val chatPrompt = if (includeChatSystemPrompt) chatSystemPrompt(chatId) else null
         if (!chatPrompt.isNullOrBlank()) {
             blocks += "[Chat system prompt, set by the user for this chat. It REPLACES your default persona, style and system instructions wherever they differ (keep only your tool and safety rules). Follow it strictly in every reply.]\n$chatPrompt"
         }
@@ -260,12 +260,17 @@ object GlobalContext {
      * [hasEarlierMessages]: the chat already has messages. Returns the prompt and, when the first-message context was
      * included, its fingerprint (record it with [markSent] once the chat id is known).
      */
-    fun wrap(chatId: String?, hasEarlierMessages: Boolean, text: String): Pair<String, String?> {
+    fun wrap(
+        chatId: String?,
+        hasEarlierMessages: Boolean,
+        text: String,
+        includeChatSystemPrompt: Boolean = true
+    ): Pair<String, String?> {
         val first = firstMessageBody()
         val fp = fingerprint()
         val known = chatId?.takeIf { it.isNotBlank() }?.let { id -> synchronized(sent) { sent[id] } }
         val sendFirst = first != null && (!hasEarlierMessages || known != fp)
-        val every = everyMessageBody(chatId)
+        val every = everyMessageBody(chatId, includeChatSystemPrompt)
         if (!sendFirst && every == null) return text to null
         val note = buildString {
             if (sendFirst) {

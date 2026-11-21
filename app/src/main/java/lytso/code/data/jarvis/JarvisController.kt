@@ -1708,7 +1708,8 @@ object JarvisController {
             cascadeId = id,
             text = prompt,
             modelEnum = modelEnum,
-            autoExecutionPolicy = "CASCADE_COMMANDS_AUTO_EXECUTION_EAGER"
+            autoExecutionPolicy = "CASCADE_COMMANDS_AUTO_EXECUTION_EAGER",
+            isJarvis = true
         ).getOrThrow()
         scope.launch { delay(2500); runCatching { vm.agyBackend.syncAgyConversations(force = true) } }
     }

@@ -580,7 +580,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /** Settings → Agents → Global context, hidden in front of the message; a new chat is remembered once it has its id. */
     private fun withGlobalContext(chatId: String?, text: String): String {
         val hasEarlier = messages.value.any { m -> m.role == MessageRole.USER }
-        val (prompt, fingerprint) = lytso.code.data.context.GlobalContext.wrap(chatId, hasEarlier, text)
+        val conv = currentConversation.value
+        val usesNativeCustomAgent = !isClaudeActive && !isOpenCodeActive && !isCodexActive && conv?.isCloud != true
+        val (prompt, fingerprint) = lytso.code.data.context.GlobalContext.wrap(
+            chatId = chatId,
+            hasEarlierMessages = hasEarlier,
+            text = text,
+            includeChatSystemPrompt = !usesNativeCustomAgent
+        )
         if (fingerprint != null && chatId.isNullOrBlank()) {
             viewModelScope.launch {
                 kotlinx.coroutines.withTimeoutOrNull(120_000) { currentConversation.first { !it?.id.isNullOrBlank() } }
@@ -967,6 +974,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        agyBackend.mcpServersProvider = { mcpManager.mcpServers.value }
         // the open chat's checkpoints are looked up whenever its messages (or the checkpoints) change
         viewModelScope.launch(Dispatchers.Default) {
             lytso.code.data.checkpoint.ProjectCheckpoints.refreshSettings()

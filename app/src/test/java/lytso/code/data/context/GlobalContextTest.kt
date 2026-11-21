@@ -94,4 +94,39 @@ class GlobalContextTest {
         GlobalContext.deleteChatSystemPrompt("chat-main")
         assertNull(GlobalContext.chatSystemPrompt("chat-main"))
     }
+
+    @Test
+    fun includeChatSystemPromptFalseSkipsDuplicateInEveryMessageBody() {
+        GlobalContext.setBuiltInEnabled(false)
+        GlobalContext.setChatSystemPrompt("chat-agy", "You are a specialized reverse-engineering persona.")
+        GlobalContext.upsert(
+            GlobalContext.Entry(
+                title = "Standing",
+                text = "Keep replies brief.",
+                enabled = true,
+                everyMessage = true
+            )
+        )
+
+        val (wrappedNative, fpNative) = GlobalContext.wrap(
+            chatId = "chat-agy",
+            hasEarlierMessages = true,
+            text = "Analyze this binary",
+            includeChatSystemPrompt = false
+        )
+        assertNull(fpNative)
+        assertFalse(wrappedNative.contains("specialized reverse-engineering persona"))
+        assertFalse(wrappedNative.contains("REPLACES your default persona"))
+        assertTrue(wrappedNative.contains("Keep replies brief."))
+        assertTrue(wrappedNative.contains("Analyze this binary"))
+
+        val (wrappedFallback, _) = GlobalContext.wrap(
+            chatId = "chat-agy",
+            hasEarlierMessages = true,
+            text = "Analyze this binary",
+            includeChatSystemPrompt = true
+        )
+        assertTrue(wrappedFallback.contains("specialized reverse-engineering persona"))
+        assertTrue(wrappedFallback.contains("Keep replies brief."))
+    }
 }

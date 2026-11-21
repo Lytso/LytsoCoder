@@ -113,7 +113,16 @@ object JarvisDriver {
             }
             AgentKind.AGY -> if (screenFree) vm.agyBackend.sendMessage(text) else {
                 val enum = AgyHubClient.resolveModelEnum(vm.agyBackend.modelOfChat(id))
-                hub.sendUserPrompt(id, text, enum).getOrThrow()
+                val isJarvis = JarvisPreferences.isJarvisChat(id)
+                val customSysPrompt = lytso.code.data.context.GlobalContext.chatSystemPrompt(id)
+                hub.sendUserPrompt(
+                    cascadeId = id,
+                    text = text,
+                    modelEnum = enum,
+                    customSystemPrompt = customSysPrompt,
+                    isJarvis = isJarvis,
+                    mcpServers = vm.agyBackend.activeChatMcpSpecs(isJarvis)
+                ).getOrThrow()
             }
             AgentKind.CODEX -> if (screenFree) vm.codexBackend.sendMessage(text) else {
                 val fresh = !codex.containsKey(id)

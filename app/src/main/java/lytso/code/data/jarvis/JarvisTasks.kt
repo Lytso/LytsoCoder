@@ -249,7 +249,12 @@ object JarvisTasks {
                     ?: lytso.code.data.local.LocalEnvironmentManager.getHomeDir(app).absolutePath)
                 hub.startCascade(id, enum, if (ws.startsWith("file://")) ws else "file://$ws").getOrThrow()
                 vm.agyBackend.rememberChatModel(id, chosen)
-                hub.sendUserPrompt(id, prompt, enum).getOrThrow()
+                hub.sendUserPrompt(
+                    cascadeId = id,
+                    text = prompt,
+                    modelEnum = enum,
+                    mcpServers = vm.agyBackend.activeChatMcpSpecs(isJarvis = false)
+                ).getOrThrow()
                 scope.launch { delay(2500); runCatching { vm.agyBackend.syncAgyConversations(force = true) } }
                 id
             }
@@ -307,7 +312,12 @@ object JarvisTasks {
             }
             AgentKind.AGY -> {
                 val enum = AgyHubClient.resolveModelEnum(vm.agyBackend.modelOfChat(t.id))
-                hub.sendUserPrompt(t.id, outgoing, enum).getOrElse { return "Could not send: ${it.message}" }
+                hub.sendUserPrompt(
+                    cascadeId = t.id,
+                    text = outgoing,
+                    modelEnum = enum,
+                    mcpServers = vm.agyBackend.activeChatMcpSpecs(isJarvis = false)
+                ).getOrElse { return "Could not send: ${it.message}" }
             }
             AgentKind.OPENCODE -> {
                 if (vm.currentConversation.value?.id == t.id) {

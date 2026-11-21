@@ -21,6 +21,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
+import exa.language_server_pb.AgentDiscoveryConfig
+import exa.language_server_pb.AgentMessageOrigin
 import exa.language_server_pb.ApprovalInteraction
 import exa.language_server_pb.AskQuestionEntry
 import exa.language_server_pb.AskQuestionInteraction
@@ -40,10 +42,15 @@ import exa.language_server_pb.CascadeToolConfig
 import exa.language_server_pb.CascadeUserInteraction
 import exa.language_server_pb.ConversationHistoryConfig
 import exa.language_server_pb.CortexTrajectorySource
+import exa.language_server_pb.CustomAgentConfig
 import exa.language_server_pb.CustomAgentSpec
+import exa.language_server_pb.CustomizationDiscoveryConfig
 import exa.language_server_pb.DefaultAgentConfig
 import exa.language_server_pb.DeleteAgentMessageRequest
 import exa.language_server_pb.HandleCascadeUserInteractionRequest
+import exa.language_server_pb.HooksDiscoveryConfig
+import exa.language_server_pb.McpDiscoveryConfig
+import exa.language_server_pb.McpServerSpec
 import exa.language_server_pb.Media
 import exa.language_server_pb.MessageDeliveryStrategy
 import exa.language_server_pb.Model
@@ -51,14 +58,17 @@ import exa.language_server_pb.ModelOrAlias
 import exa.language_server_pb.NotifyUserConfig
 import exa.language_server_pb.PermissionInteraction
 import exa.language_server_pb.PermissionScope
+import exa.language_server_pb.PluginDiscoveryConfig
 import exa.language_server_pb.ProjectEnvironmentConfig
 import exa.language_server_pb.PromptSection
-import exa.language_server_pb.PromptSectionCustomizationConfig
 import exa.language_server_pb.ResolveOutstandingStepsRequest
+import exa.language_server_pb.RulesDiscoveryConfig
 import exa.language_server_pb.RunCommandToolConfig
 import exa.language_server_pb.SendUserCascadeMessageRequest
+import exa.language_server_pb.SkillsConfig
 import exa.language_server_pb.StartCascadeRequest
 import exa.language_server_pb.TextOrScopeItem
+import exa.language_server_pb.WorkflowsConfig
 import okio.ByteString
 import okio.ByteString.Companion.decodeBase64
 
@@ -73,6 +83,181 @@ class AgyChatService {
 
         /** The tag a sent message carries in its user-input step / queued entry (same format as the hub web UI). */
         fun clientMsgTag(clientMessageId: String) = "client_msg:$clientMessageId"
+
+        /**
+         * Native coding, file, search, web, question and subagent tools registered in `agy`'s component registry.
+         * Required when `CustomAgentConfig.exclude_default_components = true` because excluding default components
+         * clears default tool declarations unless listed explicitly.
+         */
+        val CUSTOM_AGENT_TOOL_NAMES = listOf(
+            "run_command",
+            "command_status",
+            "send_command_input",
+            "view_file",
+            "write_to_file",
+            "replace_file_content",
+            "multi_replace_file_content",
+            "grep_search",
+            "find_by_name",
+            "list_dir",
+            "notebook_edit",
+            "ask_question",
+            "search_web",
+            "read_url_content",
+            "generate_image",
+            "invoke_subagent",
+            "define_subagent",
+            "manage_subagents",
+            "wait",
+            "schedule",
+            "manage_task"
+        )
+
+        internal fun buildCustomizationDiscoveryConfig(
+            isJarvis: Boolean,
+            mcpServers: List<McpServerSpec>
+        ): CustomizationDiscoveryConfig {
+            val nonJarvisMcp = if (isJarvis) emptyList() else mcpServers.filter {
+                !it.disabled && !it.server_name.equals("jarvis_mcp", ignoreCase = true)
+            }
+            return CustomizationDiscoveryConfig(
+                skills = SkillsConfig(inherit_user = false),
+                agents = AgentDiscoveryConfig(inherit_user = false),
+                plugins = PluginDiscoveryConfig(inherit_user = false),
+                rules = RulesDiscoveryConfig(inherit_user = false),
+                hooks = HooksDiscoveryConfig(inherit_user = false),
+                workflows = WorkflowsConfig(inherit_user = false),
+                mcp = if (isJarvis) {
+                    McpDiscoveryConfig(inherit_user = true)
+                } else {
+                    McpDiscoveryConfig(inherit_user = false, servers = nonJarvisMcp)
+                },
+                kind_enablement = buildMap {
+                    put("skill", false)
+                    put("plugin", false)
+                    put("agent", false)
+                    put("rule", false)
+                    put("workflow", false)
+                    put("hooks", false)
+                    if (!isJarvis && nonJarvisMcp.isEmpty()) {
+                        put("mcp", false)
+                    }
+                }
+            )
+        }
+
+        private fun toModelProtoStatic(name: String?): Model? {
+            if (name.isNullOrBlank()) return null
+            return try {
+                Model.valueOf(name)
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        internal fun buildSendUserCascadeMessageRequest(
+            cascadeId: String,
+            text: String,
+            modelEnum: String = "",
+            autoExecutionPolicy: String = "CASCADE_COMMANDS_AUTO_EXECUTION_EAGER",
+            media: List<AgyMediaItem> = emptyList(),
+            deliveryStrategy: MessageDeliveryStrategy = MessageDeliveryStrategy.MESSAGE_DELIVERY_STRATEGY_WHEN_IDLE,
+            clientMessageId: String? = null,
+            rawMedia: List<Media> = emptyList(),
+            cloud: Boolean = false,
+            customSystemPrompt: String? = null,
+            isJarvis: Boolean = false,
+            mcpServers: List<McpServerSpec> = emptyList()
+        ): SendUserCascadeMessageRequest {
+            val resolvedModelStr = resolveModelEnum(modelEnum)
+            val modelProto = toModelProtoStatic(resolvedModelStr)
+            val promptText = if (text.isNotBlank()) text else if (media.isNotEmpty()) (media.firstOrNull()?.description ?: "Voice note") else ""
+
+            val autoPolicyVal = when (autoExecutionPolicy) {
+                "CASCADE_COMMANDS_AUTO_EXECUTION_EAGER" -> CascadeCommandsAutoExecution.CASCADE_COMMANDS_AUTO_EXECUTION_EAGER
+                "CASCADE_COMMANDS_AUTO_EXECUTION_AUTO" -> CascadeCommandsAutoExecution.CASCADE_COMMANDS_AUTO_EXECUTION_AUTO
+                "CASCADE_COMMANDS_AUTO_EXECUTION_OFF" -> CascadeCommandsAutoExecution.CASCADE_COMMANDS_AUTO_EXECUTION_OFF
+                "CASCADE_COMMANDS_AUTO_EXECUTION_PROCEED_IN_SANDBOX" -> CascadeCommandsAutoExecution.CASCADE_COMMANDS_AUTO_EXECUTION_PROCEED_IN_SANDBOX
+                else -> CascadeCommandsAutoExecution.CASCADE_COMMANDS_AUTO_EXECUTION_EAGER
+            }
+
+            val mediaItems = media.map { m ->
+                val isImageOrAudio = m.mimeType.startsWith("image/") || m.mimeType.startsWith("audio/")
+                val rawBytes = if (isImageOrAudio && m.base64.isNotBlank()) {
+                    m.base64.decodeBase64() ?: ByteString.EMPTY
+                } else ByteString.EMPTY
+
+                Media(
+                    mime_type = m.mimeType,
+                    inline_data = rawBytes,
+                    duration_seconds = if (m.durationSeconds > 0) m.durationSeconds.toFloat() else 0f,
+                    description = m.description,
+                    uri = m.uri ?: ""
+                )
+            }
+
+            val trimmedPrompt = customSystemPrompt?.trim()?.takeIf { it.isNotBlank() }
+            val useCustomAgent = !cloud && trimmedPrompt != null
+            val discoveryConfig = if (!cloud) buildCustomizationDiscoveryConfig(isJarvis, mcpServers) else null
+
+            return SendUserCascadeMessageRequest(
+                cascade_id = cascadeId,
+                items = listOf(TextOrScopeItem(text = promptText)),
+                media = mediaItems + rawMedia,
+                cascade_config = CascadeConfig(
+                    planner_config = CascadePlannerConfig(
+                        tool_config = CascadeToolConfig(
+                            run_command = RunCommandToolConfig(
+                                auto_command_config = AutoCommandConfig(
+                                    auto_execution_policy = autoPolicyVal
+                                )
+                            ),
+                            notify_user = NotifyUserConfig()
+                        ),
+                        requested_model = if (modelProto != null) ModelOrAlias(model = modelProto) else null,
+                        plan_model = if (cloud && modelProto != null) modelProto else Model.MODEL_UNSPECIFIED,
+                        use_ai_credits = false,
+                        supports_latex_rendering = true,
+                        customization_discovery_config = discoveryConfig
+                    ),
+                    executor_config = CascadeExecutorConfig(use_core_direct = true),
+                    conversation_history_config = ConversationHistoryConfig()
+                ),
+                message_origin = if (useCustomAgent) {
+                    AgentMessageOrigin.AGENT_MESSAGE_ORIGIN_SDK_EXECUTABLE
+                } else {
+                    AgentMessageOrigin.AGENT_MESSAGE_ORIGIN_UNSPECIFIED
+                },
+                custom_agent_spec = if (useCustomAgent) {
+                    CustomAgentSpec(
+                        custom_agent = CustomAgentConfig(
+                            system_prompt_sections = listOf(
+                                PromptSection(
+                                    title = "System Prompt",
+                                    content = trimmedPrompt!!
+                                )
+                            ),
+                            tool_names = CUSTOM_AGENT_TOOL_NAMES,
+                            exclude_default_components = true
+                        ),
+                        skills = SkillsConfig(inherit_user = false),
+                        agents = AgentDiscoveryConfig(inherit_user = false)
+                    )
+                } else {
+                    CustomAgentSpec(
+                        builtin_agent = BuiltinAgentConfig(
+                            default_agent = DefaultAgentConfig(
+                                is_google = false,
+                                is_interactive = true
+                            )
+                        )
+                    )
+                },
+                delivery_strategy = deliveryStrategy,
+                tags = if (clientMessageId.isNullOrBlank()) emptyList() else listOf(clientMsgTag(clientMessageId)),
+                client_message_id = clientMessageId.orEmpty()
+            )
+        }
 
         private val jsonParser = Json {
             ignoreUnknownKeys = true
@@ -147,73 +332,23 @@ class AgyChatService {
         rawMedia: List<Media> = emptyList(),
         // a cloud chat (Remote Agents) ignores requested_model after its start; it switches models by plan_model
         cloud: Boolean = false,
-        customSystemPrompt: String? = null
+        customSystemPrompt: String? = null,
+        isJarvis: Boolean = false,
+        mcpServers: List<McpServerSpec> = emptyList()
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        val resolvedModelStr = resolveModelEnum(modelEnum)
-        val modelProto = toModelProto(resolvedModelStr)
-        val promptText = if (text.isNotBlank()) text else if (media.isNotEmpty()) (media.firstOrNull()?.description ?: "Voice note") else ""
-
-        val autoPolicyVal = when (autoExecutionPolicy) {
-            "CASCADE_COMMANDS_AUTO_EXECUTION_EAGER" -> CascadeCommandsAutoExecution.CASCADE_COMMANDS_AUTO_EXECUTION_EAGER
-            "CASCADE_COMMANDS_AUTO_EXECUTION_AUTO" -> CascadeCommandsAutoExecution.CASCADE_COMMANDS_AUTO_EXECUTION_AUTO
-            "CASCADE_COMMANDS_AUTO_EXECUTION_OFF" -> CascadeCommandsAutoExecution.CASCADE_COMMANDS_AUTO_EXECUTION_OFF
-            "CASCADE_COMMANDS_AUTO_EXECUTION_PROCEED_IN_SANDBOX" -> CascadeCommandsAutoExecution.CASCADE_COMMANDS_AUTO_EXECUTION_PROCEED_IN_SANDBOX
-            else -> CascadeCommandsAutoExecution.CASCADE_COMMANDS_AUTO_EXECUTION_EAGER
-        }
-
-        val mediaItems = media.map { m ->
-            val isImageOrAudio = m.mimeType.startsWith("image/") || m.mimeType.startsWith("audio/")
-            val rawBytes = if (isImageOrAudio && m.base64.isNotBlank()) {
-                m.base64.decodeBase64() ?: ByteString.EMPTY
-            } else ByteString.EMPTY
-
-            Media(
-                mime_type = m.mimeType,
-                inline_data = rawBytes,
-                duration_seconds = if (m.durationSeconds > 0) m.durationSeconds.toFloat() else 0f,
-                description = m.description,
-                uri = m.uri ?: ""
-            )
-        }
-
-        val req = SendUserCascadeMessageRequest(
-            cascade_id = cascadeId,
-            items = listOf(TextOrScopeItem(text = promptText)),
-            media = mediaItems + rawMedia,
-            cascade_config = CascadeConfig(
-                planner_config = CascadePlannerConfig(
-                    tool_config = CascadeToolConfig(
-                        run_command = RunCommandToolConfig(
-                            auto_command_config = AutoCommandConfig(
-                                auto_execution_policy = autoPolicyVal
-                            )
-                        ),
-                        notify_user = NotifyUserConfig()
-                    ),
-                    requested_model = if (modelProto != null) ModelOrAlias(model = modelProto) else null,
-                    plan_model = if (cloud && modelProto != null) modelProto else Model.MODEL_UNSPECIFIED,
-                    use_ai_credits = false,
-                    supports_latex_rendering = true
-                ),
-                executor_config = CascadeExecutorConfig(use_core_direct = true),
-                conversation_history_config = ConversationHistoryConfig()
-            ),
-            custom_agent_spec = CustomAgentSpec(
-                builtin_agent = BuiltinAgentConfig(
-                    default_agent = DefaultAgentConfig(
-                        is_google = false,
-                        is_interactive = true
-                    )
-                )
-                // No prompt_section_customization here: the language server rejects a CustomAgentSpec that carries
-                // anything but builtin_agent ("CustomAgentSpec is only allowed to specify builtin_agent unless
-                // specified by or forwarded to an SDK executable"), which failed every message of a chat that had a
-                // custom system prompt. The chat's system prompt reaches the model hidden in front of the message
-                // instead (GlobalContext.everyMessageBody), so [customSystemPrompt] is not sent through the spec.
-            ),
-            delivery_strategy = deliveryStrategy,
-            tags = if (clientMessageId.isNullOrBlank()) emptyList() else listOf(clientMsgTag(clientMessageId)),
-            client_message_id = clientMessageId.orEmpty()
+        val req = buildSendUserCascadeMessageRequest(
+            cascadeId = cascadeId,
+            text = text,
+            modelEnum = modelEnum,
+            autoExecutionPolicy = autoExecutionPolicy,
+            media = media,
+            deliveryStrategy = deliveryStrategy,
+            clientMessageId = clientMessageId,
+            rawMedia = rawMedia,
+            cloud = cloud,
+            customSystemPrompt = customSystemPrompt,
+            isJarvis = isJarvis,
+            mcpServers = mcpServers
         )
 
         AgyLanguageService.SendUserCascadeMessage().executeSafely(req).map { }
