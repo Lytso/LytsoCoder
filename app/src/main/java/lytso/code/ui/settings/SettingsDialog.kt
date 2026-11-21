@@ -1395,7 +1395,7 @@ private fun TermuxApiSubScreen(cardBg: Color, cardBorder: BorderStroke) {
                     OutlinedButton(
                         onClick = {
                             try {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Lytso/lytsocoder-termux-api/releases")))
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Lytso/lytsocoder-termux-api/releases/latest/download/lytsocoder-termux-api.apk")))
                             } catch (_: Exception) {}
                         },
                         shape = RoundedCornerShape(8.dp),
