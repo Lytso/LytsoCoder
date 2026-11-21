@@ -60,7 +60,7 @@ object PluginRepositories {
      */
     private val DEFAULT_REPOS = listOf(
         "dipeshkrydv/antigem_plugins" to "default_repo_added",
-        "Santoshkurmi/antigem_plugins" to "default_repo_added_santoshkurmi"
+        "Lytso/lytsocoder-plugins" to "default_repo_added_lytsocoder"
     )
     private val NAME = "[A-Za-z0-9_.-]+"
 

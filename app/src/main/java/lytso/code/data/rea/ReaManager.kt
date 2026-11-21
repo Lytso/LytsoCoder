@@ -45,7 +45,7 @@ object ReaManager {
     private const val PREFS = "rea_settings"
 
     /** Where the setup files and the skill plugin come from (owner/repo@branch). */
-    const val DEFAULT_SOURCE = "Santoshkurmi/antigem_plugins@main"
+    const val DEFAULT_SOURCE = "Lytso/lytsocoder-plugins@main"
     private const val SCRIPTS_PATH = "rea/skills/rea/scripts"
     const val PLUGIN_ID = "rea"
     const val CONTAINER = "ubuntu"
