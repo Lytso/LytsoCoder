@@ -3442,13 +3442,14 @@ fun ChatScreen(
                 TextButton(
                     onClick = {
                         val target = action.message
+                        val overrideDraft = action.overrideDraftText?.takeIf { it.isNotBlank() }
                         if ((isClaudeChat || isOpenCodeChat || isCodexChat) && action.type == MessageActionType.EDIT) {
                             viewModel.editClaudeMessage(target, restoreCode = false) { restoredText ->
-                                inputState.setTextAndPlaceCursorAtEnd(restoredText)
+                                inputState.setTextAndPlaceCursorAtEnd(overrideDraft ?: restoredText)
                             }
                         } else if (action.type == MessageActionType.EDIT) {
                             viewModel.revertAndEditLastUserMessage(target) { restoredText ->
-                                inputState.setTextAndPlaceCursorAtEnd(restoredText)
+                                inputState.setTextAndPlaceCursorAtEnd(overrideDraft ?: restoredText)
                             }
                         } else {
                             viewModel.retryMessage(target.id)
@@ -3772,8 +3773,10 @@ fun ChatScreen(
         val isUserMsg = targetMsg.role == lytso.code.domain.model.MessageRole.USER
         val msgIndex = messages.indexOfFirst { it.id == targetMsg.id }
         val hasLaterMessages = msgIndex in 0 until messages.lastIndex
-        val initialDraft = remember(targetMsg.id, targetMsg.editableText, targetMsg.content) {
-            targetMsg.editableText ?: lytso.code.data.remote.PromptExpansion.collapse(targetMsg.content)
+        val initialDraft = remember(targetMsg.id, targetMsg.editableText, targetMsg.content, isUserMsg) {
+            val raw = targetMsg.editableText ?: targetMsg.content
+            if (isUserMsg) lytso.code.data.remote.PromptExpansion.userEditableText(raw)
+            else lytso.code.data.remote.PromptExpansion.collapse(raw)
         }
         var draftText by remember(targetMsg.id) { mutableStateOf(initialDraft) }
 
@@ -3809,37 +3812,65 @@ fun ChatScreen(
                 }
             },
             confirmButton = {
-                Button(
-                    enabled = !isSavingInPlaceEdit && draftText.isNotBlank(),
-                    onClick = {
-                        isSavingInPlaceEdit = true
-                        viewModel.editMessageInPlace(targetMsg, draftText.trim()) { _, _ ->
-                            isSavingInPlaceEdit = false
+                if (isUserMsg) {
+                    Button(
+                        enabled = !isSavingInPlaceEdit,
+                        onClick = {
+                            val draftOverride = draftText.trim().takeIf { it.isNotBlank() && it != initialDraft }
                             editingInPlaceMessage = null
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(if (isSavingInPlaceEdit) "Saving..." else "Save in place", fontWeight = FontWeight.Bold, color = Color.White)
+                            if (hasLaterMessages) {
+                                pendingMessageAction = PendingMessageAction(
+                                    type = MessageActionType.EDIT,
+                                    message = targetMsg,
+                                    overrideDraftText = draftOverride
+                                )
+                            } else {
+                                viewModel.revertAndEditLastUserMessage(targetMsg) { restoredText ->
+                                    inputState.setTextAndPlaceCursorAtEnd(draftOverride ?: restoredText)
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Rewind & resend", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                } else {
+                    Button(
+                        enabled = !isSavingInPlaceEdit && draftText.isNotBlank(),
+                        onClick = {
+                            isSavingInPlaceEdit = true
+                            viewModel.editMessageInPlace(targetMsg, draftText.trim()) { _, _ ->
+                                isSavingInPlaceEdit = false
+                                editingInPlaceMessage = null
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(if (isSavingInPlaceEdit) "Saving..." else "Save in place", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                 }
             },
             dismissButton = {
                 Row {
-                    if (isUserMsg && !isSavingInPlaceEdit) {
+                    if (isUserMsg) {
                         TextButton(
+                            enabled = !isSavingInPlaceEdit && draftText.isNotBlank(),
                             onClick = {
-                                editingInPlaceMessage = null
-                                if (hasLaterMessages) {
-                                    pendingMessageAction = PendingMessageAction(MessageActionType.EDIT, targetMsg)
-                                } else {
-                                    viewModel.revertAndEditLastUserMessage(targetMsg) { restoredText ->
-                                        inputState.setTextAndPlaceCursorAtEnd(restoredText)
-                                    }
+                                isSavingInPlaceEdit = true
+                                viewModel.editMessageInPlace(targetMsg, draftText.trim()) { _, _ ->
+                                    isSavingInPlaceEdit = false
+                                    editingInPlaceMessage = null
                                 }
                             }
                         ) {
-                            Text("Rewind & resend", fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error)
+                            Text(
+                                text = if (isSavingInPlaceEdit) "Saving..." else "Save in place",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ClaudeTerracotta
+                            )
                         }
                     }
                     TextButton(
@@ -4218,7 +4249,7 @@ fun ChatToastBanner(
 }
 
 enum class MessageActionType { EDIT, RETRY }
-data class PendingMessageAction(val type: MessageActionType, val message: ChatMessage)
+data class PendingMessageAction(val type: MessageActionType, val message: ChatMessage, val overrideDraftText: String? = null)
 
 /** A `/command` being typed (no space after it yet): where its `/` is, the text after it, and whether only blanks precede it. */
 private data class SlashTrigger(val index: Int, val query: String, val nothingBefore: Boolean)

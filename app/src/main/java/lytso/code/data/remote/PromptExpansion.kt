@@ -10,9 +10,10 @@ import lytso.code.ui.browser.BrowserExtensionManager
  */
 object PromptExpansion {
     private const val TAG = "lytsocoder-expansion"
+    private const val LEGACY_TAG = "antigem-expansion"
     // `/plu:<plugin>:` with no skill after the colon (left by the picker) counts as `/plu:<plugin>`
     private val TOKEN = Regex("(?<=^|\\s)/(plu:[A-Za-z0-9_-]+(?::[A-Za-z0-9._-]*)?|[A-Za-z0-9][A-Za-z0-9_-]{0,47})(?=\\s|$)")
-    private val BLOCK = Regex("<$TAG command=\"([^\"]*)\">[\\s\\S]*?</$TAG>")
+    private val BLOCK = Regex("<($TAG|$LEGACY_TAG) command=\"([^\"]*)\">[\\s\\S]*?</\\1>")
 
     /** [jarvis]: the message goes to a Jarvis chat (the EGM commands then tell Jarvis to run the reviewers as task chats). */
     fun expand(text: String, jarvis: Boolean = false): String {
@@ -67,19 +68,28 @@ object PromptExpansion {
     }
 
     fun collapse(text: String): String =
-        if (!text.contains("<$TAG ")) text else BLOCK.replace(text) { unescape(it.groupValues[1]) }
+        if (!text.contains("<$TAG ") && !text.contains("<$LEGACY_TAG ")) text
+        else BLOCK.replace(text) { unescape(it.groupValues[2]) }
 
     private val ATTACHED_FILES = Regex("<attached-files>[\\s\\S]*?</attached-files>")
+
+    /**
+     * Text as the user authored it for editing: strips hidden app-context blocks (`command=""`)
+     * and attached-file wrappers, while restoring `/command` triggers to their typed form.
+     */
+    fun userEditableText(raw: String): String =
+        collapse(raw).replace(ATTACHED_FILES, "\n\n").trim()
 
     /**
      * A chat title (or history preview) without the app's hidden blocks. A title made from a prompt (the bridge's
      * first-prompt title, an agent's own title, a cut-off preview) can still carry one, even cut off half-way.
      */
     fun cleanTitle(title: String): String {
-        if (!title.contains("<$TAG") && !title.contains("<attached-files>")) return title
+        if (!title.contains("<$TAG") && !title.contains("<$LEGACY_TAG") && !title.contains("<attached-files>")) return title
         return collapse(title)
             .replace(ATTACHED_FILES, "")
             .substringBefore("<$TAG")
+            .substringBefore("<$LEGACY_TAG")
             .substringBefore("<attached-files>")
             .trim()
     }

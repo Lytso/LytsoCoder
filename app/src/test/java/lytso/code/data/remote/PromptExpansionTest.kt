@@ -75,4 +75,18 @@ class PromptExpansionTest {
         CustomSlashCommands.save(CustomSlashCommand("usr", expansion = "x"))
         listOf("/compact", "see /usr/bin", "/plu:missing:skill do it", "a/usr").forEach { assertEquals(it, PromptExpansion.expand(it)) }
     }
+
+    @Test fun userEditableTextStripsHiddenAppContextAndPreservesUserPrompt() {
+        val wrapped = PromptExpansion.hidden("[LytsoCoder app context]\nuse \$TMPDIR") + "oi"
+        assertEquals("oi", PromptExpansion.userEditableText(wrapped))
+
+        val legacy = "<antigem-expansion command=\"\">\n[AntiGem app context]\n</antigem-expansion>oi"
+        assertEquals("oi", PromptExpansion.userEditableText(legacy))
+        assertEquals("oi", PromptExpansion.cleanTitle(legacy))
+
+        val combined = PromptExpansion.hidden("[LytsoCoder app context]") +
+            PromptExpansion.labeled("/plan", "plan details") +
+            " corrige isso\n\n<attached-files>\npath=/sdcard/a.txt\n</attached-files>"
+        assertEquals("/plan corrige isso", PromptExpansion.userEditableText(combined))
+    }
 }

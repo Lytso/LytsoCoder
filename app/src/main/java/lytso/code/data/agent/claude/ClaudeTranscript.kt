@@ -678,7 +678,7 @@ class ClaudeTranscript {
                 attachments = turn.attachments,
                 stepIndex = turn.stepIndex,
                 createdAt = turn.createdAt,
-                editableText = turn.text,
+                editableText = lytso.code.data.remote.PromptExpansion.userEditableText(turn.text),
                 entryUuid = turn.uuid,
                 editableEntryUuid = turn.uuid
             )

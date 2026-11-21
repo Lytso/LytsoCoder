@@ -1,8 +1,10 @@
 {
-  "version_code": 134,
-  "version_name": "2.0.3",
+  "version_code": 135,
+  "version_name": "2.0.4",
   "min_supported_version_code": 2,
   "changelog": [
+    "Fixed user message editing showing hidden <lytsocoder-expansion> / <antigem-expansion> app context blocks instead of only the user's message",
+    "Swapped Rewind & resend and Save in place buttons in the user message edit dialog",
     "Introduced minimalist Neon Rainbow terminal (>_ ) logo unified across launcher icon, splash animation, and README",
     "Added special Rainbow AMOLED dark theme with true #000000 AMOLED surfaces and prismatic neon UI accents",
     "Published signed non-debug Release APKs for both arm64 and x86_64",

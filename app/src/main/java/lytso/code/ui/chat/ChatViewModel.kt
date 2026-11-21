@@ -1228,8 +1228,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** The text of a sent message as the user typed it (no hidden instructions, no file list). */
-    private fun editableText(raw: String): String =
-        PromptExpansion.collapse(lytso.code.data.files.AttachedFiles.extract(raw, "edit").first)
+    private fun editableText(raw: String): String = PromptExpansion.userEditableText(raw)
 
     fun addProjectFileAttachment(filePath: String, fileName: String) {
         viewModelScope.launch {

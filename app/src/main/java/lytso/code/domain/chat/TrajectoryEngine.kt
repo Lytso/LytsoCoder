@@ -701,7 +701,7 @@ class TrajectoryEngine {
                             checkpointKey = turn.clientMessageId,
                             forkStepIndex = turn.stepIndex,
                             editableStepIndex = turn.stepIndex,
-                            editableText = turn.text
+                            editableText = lytso.code.data.remote.PromptExpansion.userEditableText(turn.text)
                         )
                     )
                 }
