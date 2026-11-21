@@ -176,6 +176,7 @@ object GlobalContext {
 
     private fun saveEntries(list: List<Entry>) {
         _entries.value = list
+        val p = sp ?: return
         val arr = JSONArray()
         list.forEach { e ->
             arr.put(
@@ -183,7 +184,7 @@ object GlobalContext {
                     .put("everyMessage", e.everyMessage).put("forJarvis", e.forJarvis)
             )
         }
-        sp?.edit()?.putString("entries", arr.toString())?.apply()
+        p.edit().putString("entries", arr.toString()).apply()
     }
 
     // ------------------------------------------------------------------ the built-in text
