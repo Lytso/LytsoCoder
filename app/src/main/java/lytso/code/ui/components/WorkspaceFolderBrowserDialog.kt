@@ -266,13 +266,13 @@ fun WorkspaceFolderBrowserDialog(
                         },
                         modifier = Modifier.weight(1.4f),
                         shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                         enabled = !isLoading && errorMessage == null && currentPath.isNotBlank() && currentPath != "~"
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Check,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
@@ -329,7 +329,7 @@ fun WorkspaceFolderBrowserDialog(
                             }
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                     enabled = newFolderName.isNotBlank() && !isCreatingFolder
                 ) {
                     Text("Create", fontSize = 13.sp)

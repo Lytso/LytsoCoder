@@ -326,7 +326,6 @@ fun ChatScreen(
     val isFloatingNetworkInspectorEnabled by viewModel.isFloatingNetworkInspectorEnabled.collectAsState()
     var showNetworkInspectorDialog by remember { mutableStateOf(false) }
     val hasSeenTerminalLauncherOnboarding by viewModel.authPreferences.hasSeenTerminalLauncherOnboarding.collectAsState(initial = true)
-    val hasSeenGemmyIntro by viewModel.authPreferences.hasSeenGemmyIntro.collectAsState(initial = true)
     val isTranscribingAudio by viewModel.isTranscribingAudio.collectAsState()
     val pendingLoginUrl by viewModel.pendingLoginUrl.collectAsState()
     val agyLoginIssue by viewModel.agyLoginIssue.collectAsState()
@@ -1566,7 +1565,7 @@ fun ChatScreen(
                                     }
                                 },
                                 enabled = pastedCallback.isNotBlank() && !callbackBusy,
-                                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                             ) {
                                 Text("Finish", fontWeight = FontWeight.SemiBold)
                             }
@@ -1584,7 +1583,7 @@ fun ChatScreen(
                                 // a remote sign-in stays open for the paste step
                                 if (!remoteSignIn) viewModel.clearPendingLoginUrl()
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                         ) {
                             Text("Open Browser", fontWeight = FontWeight.SemiBold)
                         }
@@ -1627,7 +1626,7 @@ fun ChatScreen(
                             }
                             viewModel.clearAgyLoginIssue()
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                     ) {
                         Text("Verify Account", fontWeight = FontWeight.SemiBold)
                     }
@@ -3624,7 +3623,7 @@ fun ChatScreen(
                     onClick = {
                         viewModel.proceedAfterTermination(toolCall, msgId, userFeedback)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(text = "Send to AI & Proceed", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
@@ -3720,27 +3719,6 @@ fun ChatScreen(
             onDismiss = {
                 scope.launch {
                     viewModel.authPreferences.setHasSeenTerminalLauncherOnboarding(true)
-                }
-            }
-        )
-    }
-
-    // "Meet Gemmy": once the whole first-launch setup is done and the user is in chat, ask once whether to show the
-    // floating buddy (on by default, can be turned off right there). Gemmy itself only appears after this is answered.
-    val gemmyIntroDue = !hasSeenGemmyIntro && hasChosenAgents && !agentStepPending && !launcherStepPending &&
-        !isApplyingAgents && !isInFloatingWindow
-    var showGemmyIntro by remember { mutableStateOf(false) }
-    LaunchedEffect(gemmyIntroDue) {
-        if (gemmyIntroDue) delay(700) // let the chat settle after the setup steps
-        showGemmyIntro = gemmyIntroDue
-    }
-    if (showGemmyIntro && gemmyIntroDue) {
-        lytso.code.ui.onboarding.GemmyIntroDialog(
-            onConfirm = { enabled ->
-                showGemmyIntro = false
-                scope.launch {
-                    viewModel.authPreferences.setGemmyEnabled(enabled)
-                    viewModel.authPreferences.setHasSeenGemmyIntro(true)
                 }
             }
         )
@@ -3857,10 +3835,10 @@ fun ChatScreen(
                                 }
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("Rewind & resend", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Rewind & resend", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
                     }
                 } else {
                     Button(
@@ -3872,10 +3850,10 @@ fun ChatScreen(
                                 editingInPlaceMessage = null
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text(if (isSavingInPlaceEdit) "Saving..." else "Save in place", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(if (isSavingInPlaceEdit) "Saving..." else "Save in place", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
                     }
                 }
             },

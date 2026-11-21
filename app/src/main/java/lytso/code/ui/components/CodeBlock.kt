@@ -261,7 +261,7 @@ fun CodeBlock(
                             Icon(
                                 imageVector = Icons.Outlined.Code,
                                 contentDescription = null,
-                                tint = if (selectedTab == 0) Color.White else AppColors.codeText.copy(alpha = 0.6f),
+                                tint = if (selectedTab == 0) MaterialTheme.colorScheme.onPrimary else AppColors.codeText.copy(alpha = 0.6f),
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(3.dp))
@@ -286,7 +286,7 @@ fun CodeBlock(
                             Icon(
                                 imageVector = Icons.Filled.PlayArrow,
                                 contentDescription = null,
-                                tint = if (selectedTab == 1) Color.White else AppColors.codeText.copy(alpha = 0.6f),
+                                tint = if (selectedTab == 1) MaterialTheme.colorScheme.onPrimary else AppColors.codeText.copy(alpha = 0.6f),
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(3.dp))
@@ -550,7 +550,7 @@ fun CodeBlock(
                                             text = "Code",
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = if (selectedTab == 0) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = if (selectedTab == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                     Box(
@@ -564,7 +564,7 @@ fun CodeBlock(
                                             text = "Preview",
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = if (selectedTab == 1) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = if (selectedTab == 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }

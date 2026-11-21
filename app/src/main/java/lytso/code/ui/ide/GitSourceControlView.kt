@@ -413,10 +413,10 @@ fun GitSourceControlView(
                                 }
                             },
                             enabled = !isOperating,
-                            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                         ) {
                             if (isOperating) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.width(8.dp))
                             } else {
                                 Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -500,14 +500,14 @@ fun GitSourceControlView(
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = ClaudeTerracotta,
-                    contentColor = Color.White
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(36.dp)
             ) {
                 if (isOperating) {
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
                     Spacer(modifier = Modifier.width(6.dp))
                 } else {
                     Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
@@ -953,7 +953,7 @@ fun GitSourceControlView(
                             isOperating = false
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text(if (configPromptReason != null) "Save & Continue" else "Save")
                 }
@@ -1268,7 +1268,7 @@ fun GitSourceControlView(
                             isOperating = false
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text("Unstage All")
                 }
@@ -1305,7 +1305,7 @@ fun GitSourceControlView(
                             isOperating = false
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text("Pull")
                 }
@@ -1351,7 +1351,7 @@ fun GitSourceControlView(
                             isOperating = false
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text(if (unpushedCount > 0) "Push ($unpushedCount)" else "Push")
                 }
@@ -1410,7 +1410,7 @@ fun GitSourceControlView(
                             isOperating = false
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text("Commit")
                 }

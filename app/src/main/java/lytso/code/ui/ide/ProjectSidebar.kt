@@ -517,7 +517,7 @@ fun ProjectSidebar(
                         }
                     },
                     enabled = newItemName.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text("Create")
                 }
@@ -570,7 +570,7 @@ fun ProjectSidebar(
                         }
                     },
                     enabled = renameInput.trim().isNotBlank() && renameInput.trim() != node.name,
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text("Rename")
                 }

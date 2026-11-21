@@ -1351,7 +1351,7 @@ fun ChatInputBar(
                                     Icon(
                                         imageVector = Icons.Default.ArrowUpward,
                                         contentDescription = "Send",
-                                        tint = if (sendBlocked) lytso.code.theme.AppColors.textSecondary else if (isRainbowSend) Color(0xFF05060B) else if (isBackgroundActive) lytso.code.theme.AppColors.onBackground else Color.White,
+                                        tint = if (sendBlocked) lytso.code.theme.AppColors.textSecondary else if (isRainbowSend) Color(0xFF05060B) else if (isBackgroundActive) lytso.code.theme.AppColors.onBackground else MaterialTheme.colorScheme.onPrimary,
                                         modifier = Modifier.size(19.dp)
                                     )
                                 }

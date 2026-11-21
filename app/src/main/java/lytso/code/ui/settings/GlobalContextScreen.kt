@@ -296,10 +296,11 @@ private fun EntryCard(e: GlobalContext.Entry, onToggle: (Boolean) -> Unit, onCli
 
 @Composable
 private fun Chip(label: String, highlight: Boolean) {
-    val c = if (highlight) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+    val bg = if (highlight) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer
+    val fg = if (highlight) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onPrimaryContainer
     Text(
-        label, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = c,
-        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(c.copy(alpha = 0.13f)).padding(horizontal = 6.dp, vertical = 2.dp)
+        label, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = fg,
+        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(bg).padding(horizontal = 7.dp, vertical = 2.dp)
     )
 }
 

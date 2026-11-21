@@ -360,7 +360,7 @@ internal fun ServersSubScreen(
             confirmButton = {
                 Button(
                     onClick = { showUnsavedDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                     shape = RoundedCornerShape(8.dp)
                 ) { Text("Keep Editing", fontWeight = FontWeight.Bold) }
             },
@@ -422,7 +422,7 @@ internal fun ServersSubScreen(
                             Runtime.getRuntime().exit(0)
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                     shape = RoundedCornerShape(8.dp)
                 ) { Text("Reopen Now", fontWeight = FontWeight.Bold) }
             },
@@ -531,7 +531,7 @@ internal fun ServersSubScreen(
                         showSaveProfile = false; profileTick++
                         saveFeedback = "Profile \"${profileName.trim()}\" saved on this phone."; saveIsError = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta), shape = RoundedCornerShape(8.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary), shape = RoundedCornerShape(8.dp)
                 ) { Text("Save", fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(onClick = { showSaveProfile = false }) { Text("Cancel") } },
@@ -560,7 +560,7 @@ internal fun ServersSubScreen(
                         profileToUpdate = null; profileTick++
                         saveFeedback = "Profile \"$uName\" updated."; saveIsError = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta), shape = RoundedCornerShape(8.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary), shape = RoundedCornerShape(8.dp)
                 ) { Text("Update", fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(onClick = { profileToUpdate = null }) { Text("Cancel") } },
@@ -1172,7 +1172,7 @@ internal fun ServersSubScreen(
                 showRestartDialog = true
             },
             modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
         ) {
             Icon(Icons.Default.Save, null, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
@@ -1309,7 +1309,7 @@ private fun PortForwardsCard(cardBg: Color, cardBorder: BorderStroke, subtle: Co
                             serverPort = ""; localPort = ""; name = ""
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta), shape = RoundedCornerShape(8.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary), shape = RoundedCornerShape(8.dp)
                 ) { Text("Add", fontWeight = FontWeight.Bold) }
             }
             error?.let { Text(it, fontSize = 11.5.sp, color = Color.Red, modifier = Modifier.padding(top = 6.dp)) }

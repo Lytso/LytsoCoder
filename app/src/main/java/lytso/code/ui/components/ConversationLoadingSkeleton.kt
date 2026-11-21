@@ -404,7 +404,7 @@ fun NewChatSignInPromptCard(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = ClaudeTerracotta,
-                contentColor = Color.White
+                contentColor = MaterialTheme.colorScheme.onPrimary
             ),
             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)
         ) {

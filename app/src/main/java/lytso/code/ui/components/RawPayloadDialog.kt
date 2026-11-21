@@ -190,10 +190,10 @@ fun RawPayloadDialog(
 
                     Button(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("Close", fontSize = 13.sp, color = Color.White)
+                        Text("Close", fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimary)
                     }
                 }
             }

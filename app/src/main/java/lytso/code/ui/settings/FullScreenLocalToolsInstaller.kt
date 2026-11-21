@@ -611,7 +611,7 @@ private fun SourceOption(
                     contentAlignment = Alignment.Center
                 ) {
                     if (selected) {
-                        Icon(Icons.Default.Check, contentDescription = "Selected", tint = Color.White, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Default.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -869,7 +869,7 @@ private fun PrimaryButton(text: String, icon: ImageVector?, onClick: () -> Unit)
             .fillMaxWidth()
             .height(54.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = Color.White)
+        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
     ) {
         if (icon != null) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))

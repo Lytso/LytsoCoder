@@ -86,8 +86,8 @@ import lytso.code.data.daemon.IdeApiClient
 
 enum class SettingsSection(val title: String, val subtitle: String) {
     MAIN("Settings & Preferences", "Configure your LytsoCoder experience"),
-    THEMES("Themes", "Light and dark mode, and the theme gallery"),
-    APPEARANCE("Appearance", "Chat text size, chat list, header icons, the app switcher and Gemmy"),
+    THEMES("Themes", "Light and dark mode, Neon palettes and theme gallery"),
+    APPEARANCE("Appearance", "Chat text size, chat list, header icons and the app switcher"),
     STEM_RENDERING("STEM & diagrams", "Chemistry, graphs, geometry, simulations, circuits and offline Mermaid in chats"),
     SERVERS("Servers & Connectivity", "Configure AGY Hub and IDE Bridge endpoints"),
     CONNECT_PC("Connect to PC", "Use the agents on your PC (LytsoCoder in VS Code) from this phone"),
@@ -117,7 +117,6 @@ enum class SettingsSection(val title: String, val subtitle: String) {
     GLOBAL_CONTEXT("Global context", "What every chat is told about this app, and your own instructions"),
     AGENT_MEMORY("Agent memory & history", "Memories every agent keeps across chats, and past chats they can look up"),
     AGENT_HISTORY("Saved chats", "The chat history the agents can look up: read, edit or remove it"),
-    EGM("EGM · Elephant-Goldfish", "Plan a design and have fresh reviewers attack it before any code (/egm)"),
     JARVIS("Jarvis", "Hands-free voice control of the whole app"),
     JARVIS_AGENT("Jarvis · Agent", "Which agent and model Jarvis talks to"),
     JARVIS_PERSONALITY("Jarvis · Personality & you", "How Jarvis speaks, and what it should know about you"),
@@ -166,7 +165,7 @@ enum class SettingsSection(val title: String, val subtitle: String) {
         CODEX_PAGE -> CODEX
         TERMUX_API, X11_DESKTOP -> TERMUX_SUPPORT
         REA_GROUPS -> REA
-        GLOBAL_SYSTEM_PROMPT, GLOBAL_CONTEXT, AGENT_MEMORY, EGM -> AGENTS
+        GLOBAL_SYSTEM_PROMPT, GLOBAL_CONTEXT, AGENT_MEMORY -> AGENTS
         AGENT_HISTORY -> AGENT_MEMORY
         CHANGELOG -> ABOUT
         else -> if (jarvisPage != null) JARVIS else MAIN
@@ -644,8 +643,7 @@ fun SettingsDialog(
                         onApply = onApplyAgents,
                         onOpenGlobalSystemPrompt = { currentSection = SettingsSection.GLOBAL_SYSTEM_PROMPT },
                         onOpenGlobalContext = { currentSection = SettingsSection.GLOBAL_CONTEXT },
-                        onOpenAgentMemory = { currentSection = SettingsSection.AGENT_MEMORY },
-                        onOpenEgm = { currentSection = SettingsSection.EGM }
+                        onOpenAgentMemory = { currentSection = SettingsSection.AGENT_MEMORY }
                     )
                     SettingsSection.GLOBAL_SYSTEM_PROMPT -> GlobalSystemPromptScreen(
                         onOpenGlobalContext = { currentSection = SettingsSection.GLOBAL_CONTEXT }
@@ -653,7 +651,6 @@ fun SettingsDialog(
                     SettingsSection.GLOBAL_CONTEXT -> GlobalContextScreen(
                         onOpenGlobalSystemPrompt = { currentSection = SettingsSection.GLOBAL_SYSTEM_PROMPT }
                     )
-                    SettingsSection.EGM -> EgmScreen(cardBg = cardBg, cardBorder = cardBorder)
                     SettingsSection.AGENT_MEMORY -> AgentMemoryScreen(onOpenHistory = { currentSection = SettingsSection.AGENT_HISTORY })
                     SettingsSection.AGENT_HISTORY -> AgentHistoryScreen()
                     SettingsSection.STEM_RENDERING -> StemRenderingScreen()
@@ -826,8 +823,14 @@ private fun MainSettingsMenu(
     val codexOn = lytso.code.domain.model.AgentKind.CODEX in enabledAgents
     val codexState = codex?.state?.collectAsState()?.value
     val c = lytso.code.theme.AppColors
-    fun row(section: SettingsSection, icon: ImageVector, tint: Color, value: String? = null, valueColor: Color? = null) =
-        SettingsRowItem(icon, tint, section.title, value, valueColor) { onNavigate(section) }
+    fun row(
+        section: SettingsSection,
+        icon: ImageVector,
+        tint: Color,
+        value: String? = null,
+        valueColor: Color? = null,
+        subtitle: String? = null
+    ) = SettingsRowItem(icon, tint, section.title, value, valueColor, subtitle) { onNavigate(section) }
 
     val (serverValue, serverColor) = when {
         isServerOnline && isBridgeOnline -> "Online" to QuotaGreen
@@ -885,73 +888,182 @@ private fun MainSettingsMenu(
         claudeColor = state.dotColor
     }
 
-    SettingsRowList(
+    val globalSysPrompt by lytso.code.data.context.GlobalContext.globalSystemPrompt.collectAsState()
+    val hasGlobalSysPrompt = !globalSysPrompt.isNullOrBlank()
+    val builtInCtxOn by lytso.code.data.context.GlobalContext.builtInEnabled.collectAsState()
+    val currentThemeName = lytso.code.theme.ThemeManager.current.name
+    val isRainbow = lytso.code.theme.ThemeManager.isRainbowAmoled
+    val headerBorder = if (isRainbow) {
+        lytso.code.theme.RainbowAccent.borderStroke(width = 1.dp, alpha = 0.35f)
+    } else {
+        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
+    }
+
+    SettingsSectionList(
         scrollState = scrollState,
         cardBg = cardBg,
-        groups = listOf(
-            listOf(
-                row(SettingsSection.THEMES, Icons.Outlined.Palette, c.accentPink, lytso.code.theme.ThemeManager.current.name),
-                row(SettingsSection.APPEARANCE, Icons.Outlined.Tune, c.accentAlt),
-                stemRow,
-                row(SettingsSection.SERVERS, Icons.Outlined.Dns, c.info, serverValue, serverColor),
-                pcRow
-            ),
-            listOfNotNull(
-                row(SettingsSection.AGENTS, Icons.Outlined.SmartToy, MaterialTheme.colorScheme.primary, when {
-                    enabledAgents.size == lytso.code.domain.model.AgentKind.entries.size -> "All agents"
-                    enabledAgents.size >= 3 -> "${enabledAgents.size} agents"
-                    enabledAgents.size == 2 -> lytso.code.domain.model.AgentKind.entries.filter { it in enabledAgents }
-                        .joinToString(" + ") {
-                            when (it) {
-                                lytso.code.domain.model.AgentKind.AGY -> "AGY"
-                                lytso.code.domain.model.AgentKind.CLAUDE -> "Claude"
-                                lytso.code.domain.model.AgentKind.OPENCODE -> "OpenCode"
-                                lytso.code.domain.model.AgentKind.CODEX -> "Codex"
-                            }
+        searchable = true,
+        header = {
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = cardBg,
+                border = headerBorder,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "LytsoCoder v${BuildConfig.VERSION_NAME}",
+                                fontSize = 15.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Theme: $currentThemeName · ${enabledAgents.size} agent${if (enabledAgents.size == 1) "" else "s"} active",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                    claudeOn -> "Claude Code"
-                    openCodeOn -> "OpenCode"
-                    codexOn -> "Codex"
-                    else -> "Antigravity"
-                }),
-                if (agyOn) row(SettingsSection.ANTIGRAVITY, Icons.Outlined.RocketLaunch, GeminiBlue,
-                    if (activeMcp > 0) "$activeMcp MCP" else null) else null,
-                if (claude != null && claudeOn) row(SettingsSection.CLAUDE, Icons.Outlined.AutoAwesome, ClaudeAccent, claudeValue, claudeColor) else null,
-                if (openCode != null && openCodeOn) row(SettingsSection.OPENCODE, Icons.Outlined.Code, lytso.code.ui.components.OpenCodeAccent, openCodeState?.label,
-                    if (openCodeState == lytso.code.data.agent.opencode.OpenCodeState.READY) QuotaGreen else c.warning) else null,
-                if (codex != null && codexOn) row(SettingsSection.CODEX, Icons.Outlined.Terminal, lytso.code.ui.components.CodexAccent, codexState?.label,
-                    if (codexState == lytso.code.data.agent.codex.CodexState.READY) QuotaGreen else c.warning) else null,
-                row(SettingsSection.JARVIS, Icons.Outlined.RecordVoiceOver, c.accentTeal, if (jarvisOn) "On" else "Off",
-                    if (jarvisOn) QuotaGreen else null)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(serverColor.copy(alpha = 0.14f))
+                                .clickable { onNavigate(SettingsSection.SERVERS) }
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Box(Modifier.size(7.dp).clip(CircleShape).background(serverColor))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = serverValue,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        FilledTonalButton(
+                            onClick = { onNavigate(SettingsSection.THEMES) },
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Outlined.Palette, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Themes", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        }
+                        Button(
+                            onClick = { onNavigate(SettingsSection.GLOBAL_SYSTEM_PROMPT) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Outlined.Psychology, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("System Prompt", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        },
+        sections = listOf(
+            SettingsSectionGroup(
+                title = "Appearance & Display",
+                items = listOf(
+                    row(SettingsSection.THEMES, Icons.Outlined.Palette, c.accentPink, currentThemeName, subtitle = "Neon Light, Rainbow AMOLED & gallery"),
+                    row(SettingsSection.APPEARANCE, Icons.Outlined.Tune, c.accentAlt, subtitle = "Font scale, header icons & switcher"),
+                    stemRow
+                )
             ),
-            listOf(
-                row(SettingsSection.WEBVIEW_EXTENSIONS, Icons.Outlined.Extension, c.accentAlt),
-                row(SettingsSection.SLASH_COMMANDS, Icons.Outlined.Bolt, c.warning),
-                checkpointsRow
+            SettingsSectionGroup(
+                title = "AI Agents & Prompts",
+                items = listOfNotNull(
+                    row(
+                        SettingsSection.GLOBAL_SYSTEM_PROMPT,
+                        Icons.Outlined.Psychology,
+                        MaterialTheme.colorScheme.primary,
+                        value = if (hasGlobalSysPrompt) "Custom" else "Default",
+                        valueColor = if (hasGlobalSysPrompt) QuotaGreen else null,
+                        subtitle = "Global persona & <identity> override"
+                    ),
+                    row(
+                        SettingsSection.GLOBAL_CONTEXT,
+                        Icons.Outlined.Description,
+                        c.accentTeal,
+                        value = if (builtInCtxOn) "On" else "Off",
+                        valueColor = if (builtInCtxOn) QuotaGreen else null,
+                        subtitle = "Environment & standing instructions"
+                    ),
+                    row(SettingsSection.AGENTS, Icons.Outlined.SmartToy, MaterialTheme.colorScheme.primary, when {
+                        enabledAgents.size == lytso.code.domain.model.AgentKind.entries.size -> "All agents"
+                        enabledAgents.size >= 3 -> "${enabledAgents.size} agents"
+                        enabledAgents.size == 2 -> lytso.code.domain.model.AgentKind.entries.filter { it in enabledAgents }
+                            .joinToString(" + ") {
+                                when (it) {
+                                    lytso.code.domain.model.AgentKind.AGY -> "AGY"
+                                    lytso.code.domain.model.AgentKind.CLAUDE -> "Claude"
+                                    lytso.code.domain.model.AgentKind.OPENCODE -> "OpenCode"
+                                    lytso.code.domain.model.AgentKind.CODEX -> "Codex"
+                                }
+                            }
+                        claudeOn -> "Claude Code"
+                        openCodeOn -> "OpenCode"
+                        codexOn -> "Codex"
+                        else -> "Antigravity"
+                    }, subtitle = "Enable agents, memory & completion alerts"),
+                    if (agyOn) row(SettingsSection.ANTIGRAVITY, Icons.Outlined.RocketLaunch, GeminiBlue,
+                        if (activeMcp > 0) "$activeMcp MCP" else null, subtitle = "Account, CLI, MCP, skills & permissions") else null,
+                    if (claude != null && claudeOn) row(SettingsSection.CLAUDE, Icons.Outlined.AutoAwesome, ClaudeAccent, claudeValue, claudeColor, subtitle = "Models, MCP, plugins & memory") else null,
+                    if (openCode != null && openCodeOn) row(SettingsSection.OPENCODE, Icons.Outlined.Code, lytso.code.ui.components.OpenCodeAccent, openCodeState?.label,
+                        if (openCodeState == lytso.code.data.agent.opencode.OpenCodeState.READY) QuotaGreen else c.warning, subtitle = "Providers, endpoints & MCP") else null,
+                    if (codex != null && codexOn) row(SettingsSection.CODEX, Icons.Outlined.Terminal, lytso.code.ui.components.CodexAccent, codexState?.label,
+                        if (codexState == lytso.code.data.agent.codex.CodexState.READY) QuotaGreen else c.warning, subtitle = "Account, limits & MCP") else null,
+                    row(SettingsSection.JARVIS, Icons.Outlined.RecordVoiceOver, c.accentTeal, if (jarvisOn) "On" else "Off",
+                        if (jarvisOn) QuotaGreen else null, subtitle = "Hands-free voice assistant")
+                )
             ),
-            listOfNotNull(
-                row(SettingsSection.TERMINAL, Icons.Outlined.Terminal, c.accentIndigo,
-                    if (useSshTerminal || lytso.code.data.preferences.AuthPreferences.currentRemoteMode) "SSH" else "Local"),
-                githubRow,
-                deviceTools.adb,
-                deviceTools.automation,
-                reaRow,
-                androidDevRow,
-                // Termux:API and X11, used by the Termux packages in the terminal
-                row(SettingsSection.TERMUX_SUPPORT, Icons.Outlined.Cable, c.accentIndigo),
-                // Utilities only shows once it has something in it (its old items are rows of their own now)
-                if (utilityRows(onNavigate).isNotEmpty()) row(SettingsSection.UTILITIES, Icons.Outlined.Handyman, c.accentTeal) else null,
-                row(SettingsSection.DIAGNOSTICS, Icons.Outlined.Speed, c.success,
-                    if (isFloatingDiagnosticsEnabled) "HUD on" else null, if (isFloatingDiagnosticsEnabled) QuotaGreen else null)
+            SettingsSectionGroup(
+                title = "Workspace & Connectivity",
+                items = listOf(
+                    row(SettingsSection.SERVERS, Icons.Outlined.Dns, c.info, serverValue, serverColor, subtitle = "AGY Hub & IDE Bridge endpoints"),
+                    pcRow,
+                    row(SettingsSection.WEBVIEW_EXTENSIONS, Icons.Outlined.Extension, c.accentAlt, subtitle = "Custom plugins, MCP tools & skills"),
+                    row(SettingsSection.SLASH_COMMANDS, Icons.Outlined.Bolt, c.warning, subtitle = "Custom / commands & expansions"),
+                    checkpointsRow
+                )
             ),
-            listOfNotNull(
-                // backups are of the phone's own Linux environment, so only with it installed and not in server mode
-                if (isLocalToolsInstalled && !lytso.code.data.preferences.AuthPreferences.currentRemoteMode)
-                    row(SettingsSection.BACKUPS, Icons.Outlined.Backup, c.info) else null,
-                row(SettingsSection.DATA_PROTECTION, Icons.Outlined.Security, c.success)
+            SettingsSectionGroup(
+                title = "Device & Developer",
+                items = listOfNotNull(
+                    row(SettingsSection.TERMINAL, Icons.Outlined.Terminal, c.accentIndigo,
+                        if (useSshTerminal || lytso.code.data.preferences.AuthPreferences.currentRemoteMode) "SSH" else "Local",
+                        subtitle = "Shell, SSH, local tools & styling"),
+                    githubRow,
+                    deviceTools.adb,
+                    deviceTools.automation,
+                    reaRow,
+                    androidDevRow,
+                    row(SettingsSection.TERMUX_SUPPORT, Icons.Outlined.Cable, c.accentIndigo, subtitle = "Termux:API & X11 desktop"),
+                    if (utilityRows(onNavigate).isNotEmpty()) row(SettingsSection.UTILITIES, Icons.Outlined.Handyman, c.accentTeal) else null,
+                    row(SettingsSection.DIAGNOSTICS, Icons.Outlined.Speed, c.success,
+                        if (isFloatingDiagnosticsEnabled) "HUD on" else null, if (isFloatingDiagnosticsEnabled) QuotaGreen else null,
+                        subtitle = "Network inspector & performance HUD")
+                )
             ),
-            listOf(
-                row(SettingsSection.ABOUT, Icons.Outlined.Info, c.accentAlt, "v${BuildConfig.VERSION_NAME}")
+            SettingsSectionGroup(
+                title = "System & Data",
+                items = listOfNotNull(
+                    if (isLocalToolsInstalled && !lytso.code.data.preferences.AuthPreferences.currentRemoteMode)
+                        row(SettingsSection.BACKUPS, Icons.Outlined.Backup, c.info, subtitle = "Rootfs environment & chat histories") else null,
+                    row(SettingsSection.DATA_PROTECTION, Icons.Outlined.Security, c.success, subtitle = "Uninstall & clear-data shield"),
+                    row(SettingsSection.ABOUT, Icons.Outlined.Info, c.accentAlt, "v${BuildConfig.VERSION_NAME}", subtitle = "Version, changelog & bridge export")
+                )
             )
         )
     )
@@ -1634,7 +1746,7 @@ private fun AppearanceSubScreen(
                     checked = groupChatsByWorkspace,
                     onCheckedChange = onToggleGroupChatsByWorkspace,
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                         checkedTrackColor = ClaudeTerracotta
                     )
                 )
@@ -1909,58 +2021,6 @@ private fun AppearanceSubScreen(
             }
         }
 
-        // Gemmy: the floating cartoon buddy (on by default; first offered by the one-time "Meet Gemmy" dialog)
-        val gemmyContext = LocalContext.current
-        val gemmyPrefs = remember(gemmyContext) { lytso.code.data.preferences.AuthPreferences(gemmyContext) }
-        val isGemmyEnabled by gemmyPrefs.isGemmyEnabled.collectAsState(initial = true)
-        val gemmyScope = rememberCoroutineScope()
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = cardBg,
-            border = cardBorder,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                lytso.code.ui.components.GemmyPreview(
-                    zoom = 0.85f,
-                    modifier = Modifier.alpha(if (isGemmyEnabled) 1f else 0.4f)
-                )
-                Column(modifier = Modifier.weight(1f).padding(start = 4.dp, end = 12.dp)) {
-                    Text(
-                        text = "Gemmy",
-                        fontSize = 13.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "A floating cartoon buddy across the app: drag or fling it, tap, double-tap or long-press it. " +
-                            "It reacts while the agent works and rests (almost no battery) when left alone.",
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                }
-                Switch(
-                    checked = isGemmyEnabled,
-                    onCheckedChange = { enable ->
-                        gemmyScope.launch {
-                            gemmyPrefs.setGemmyEnabled(enable)
-                            gemmyPrefs.setHasSeenGemmyIntro(true) // decided here: no need for the intro dialog anymore
-                        }
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = ClaudeTerracotta
-                    )
-                )
-            }
-        }
-
         // Standalone Terminal Launcher Icon & Style Settings (PackageManager as source of truth)
         val context = LocalContext.current
         val authPrefs = remember(context) { lytso.code.data.preferences.AuthPreferences(context) }
@@ -2016,7 +2076,7 @@ private fun AppearanceSubScreen(
                             }
                         },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                             checkedTrackColor = ClaudeTerracotta
                         )
                     )
@@ -2598,7 +2658,7 @@ private fun McpSubScreen(
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                         contentPadding = PaddingValues(vertical = 10.dp, horizontal = 12.dp)
                     ) {
                         Icon(
@@ -3808,7 +3868,7 @@ private fun AddEditMcpServerDialog(
                         onSave(spec, null)
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
             ) {
                 Text("Save", fontWeight = FontWeight.Bold)
             }
@@ -4065,7 +4125,7 @@ private fun TerminalSubScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                     ) {
                         Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
@@ -4116,7 +4176,7 @@ private fun TerminalSubScreen(
                                 onClick = onInstallLocalTools,
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                             ) {
                                 Text("Download & Install Local Tools", fontSize = 12.5.sp)
                             }
@@ -4229,7 +4289,7 @@ private fun TerminalSubScreen(
             onClick = onOpenLocalTerminal,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
         ) {
             Icon(imageVector = Icons.Default.Terminal, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))
@@ -4696,7 +4756,7 @@ private fun BackupsSubScreen(
                         Toast.makeText(context, "Stopping server... Please re-run $actionName once stopped.", Toast.LENGTH_SHORT).show()
                     },
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text("Stop server", fontWeight = FontWeight.SemiBold)
                 }
@@ -4757,7 +4817,7 @@ private fun BackupsSubScreen(
                         }
                     },
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text("Start backup", fontWeight = FontWeight.SemiBold)
                 }
@@ -4823,7 +4883,7 @@ private fun BackupsSubScreen(
                         }
                     },
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text("Start backup", fontWeight = FontWeight.SemiBold)
                 }
@@ -4897,7 +4957,7 @@ private fun BackupsSubScreen(
                     },
                     enabled = restoreFilePath.isNotBlank(),
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text("Start restore", fontWeight = FontWeight.SemiBold)
                 }
@@ -5071,7 +5131,7 @@ private fun BackupPrimaryButton(text: String, icon: androidx.compose.ui.graphics
     Button(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = Color.White),
+        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
         elevation = null,
         modifier = Modifier.fillMaxWidth().height(44.dp)
     ) {
@@ -5711,7 +5771,7 @@ private fun ProjectsBackupRestoreDialog(
                             },
                             enabled = selectedCount > 0,
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(Icons.Outlined.Archive, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -5934,7 +5994,7 @@ private fun ProjectsBackupRestoreDialog(
                             },
                             enabled = restoreZipPath.isNotBlank(),
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(Icons.Outlined.SettingsBackupRestore, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -6818,7 +6878,7 @@ private fun CommandsSubScreen(
                         Button(
                             onClick = onRefreshSecurityAndProjects,
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
@@ -7268,7 +7328,7 @@ private fun CommandsSubScreen(
                         checked = activeSandbox,
                         onCheckedChange = { onSetGlobalTerminalSandbox(it) },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                             checkedTrackColor = ClaudeTerracotta
                         )
                     )
@@ -7300,7 +7360,7 @@ private fun CommandsSubScreen(
                         checked = requireApprovalForFileEdits,
                         onCheckedChange = onSetRequireApprovalForFileEdits,
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                             checkedTrackColor = ClaudeTerracotta
                         )
                     )
@@ -7354,7 +7414,7 @@ private fun CommandsSubScreen(
                 Button(
                     onClick = { showAddRuleDialog = true },
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -8019,7 +8079,7 @@ private fun AddPermissionRuleDialog(
                 onClick = { onAdd(selectedAction, patternText.trim(), selectedDecision) },
                 enabled = patternText.isNotBlank(),
                 shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
             ) {
                 Text("Save Rule", fontWeight = FontWeight.Bold)
             }
@@ -8781,12 +8841,12 @@ private fun AboutSubScreen(
                     enabled = !isCheckingUpdate,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     if (isCheckingUpdate) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))

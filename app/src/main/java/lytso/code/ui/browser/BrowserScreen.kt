@@ -1486,7 +1486,7 @@ private fun SpeedDialHomeView(
                             showAddDialog = false
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text("Add")
                 }
@@ -1780,7 +1780,7 @@ private fun TabOverviewScreen(
                         onClick = onNewTab,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = ClaudeTerracotta,
-                            contentColor = Color.White
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         shape = RoundedCornerShape(20.dp),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
@@ -2242,7 +2242,7 @@ fun BrowserDiagnosticOverlay(
                         onClick = onReload,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = ClaudeTerracotta,
-                            contentColor = Color.White
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f).height(42.dp)

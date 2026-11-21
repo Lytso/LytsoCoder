@@ -252,7 +252,7 @@ fun ProjectPickerDialog(
                                         Icon(
                                             imageVector = Icons.Outlined.Check,
                                             contentDescription = "Selected",
-                                            tint = Color.White,
+                                            tint = MaterialTheme.colorScheme.onPrimary,
                                             modifier = Modifier.size(15.dp)
                                         )
                                     }
@@ -345,7 +345,7 @@ fun ProjectPickerDialog(
                                         Icon(
                                             imageVector = Icons.Outlined.Check,
                                             contentDescription = "Selected",
-                                            tint = Color.White,
+                                            tint = MaterialTheme.colorScheme.onPrimary,
                                             modifier = Modifier.size(15.dp)
                                         )
                                     }
@@ -397,12 +397,12 @@ fun ProjectPickerDialog(
                         .fillMaxWidth()
                         .height(46.dp),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Icon(
                         imageVector = Icons.Default.FolderOpen,
                         contentDescription = null,
-                        tint = Color.White,
+                        tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))

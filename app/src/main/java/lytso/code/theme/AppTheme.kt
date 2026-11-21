@@ -278,7 +278,10 @@ object ThemeTokens {
         val pairs = listOf(
             Triple("on_background", "background", 4.5f), Triple("on_surface", "surface", 4.5f),
             Triple("on_surface", "card", 4.5f), Triple("on_surface_variant", "surface", 3f),
-            Triple("text_secondary", "background", 3f), Triple("on_primary", "primary", 3f),
+            Triple("text_secondary", "background", 3f), Triple("on_primary", "primary", 4.5f),
+            Triple("on_primary_container", "primary_container", 4.5f),
+            Triple("on_secondary", "secondary", 4.5f), Triple("on_tertiary", "tertiary", 4.5f),
+            Triple("on_error", "error", 4.5f),
             Triple("primary", "background", 2.5f), Triple("on_surface", "user_bubble", 4.5f),
             Triple("code_text", "code_bg", 4.5f), Triple("syntax_comment", "code_bg", 2.5f),
             Triple("danger", "background", 2.5f), Triple("success", "background", 2.5f),
@@ -307,10 +310,12 @@ object ThemeTokens {
 
 /** The themes that come with the app. */
 object BuiltInThemes {
-    const val LIGHT_DEFAULT = "antigem_light"
+    const val NEON_LIGHT = "neon_light"
+    const val LIGHT_DEFAULT = NEON_LIGHT
     const val RAINBOW_AMOLED = "rainbow_amoled"
     const val DARK_DEFAULT = RAINBOW_AMOLED
-    /** The original LytsoCoder dark look (no longer the default; the id stays so a saved choice still finds it). */
+    /** The original LytsoCoder light/dark looks (IDs stay so saved choices still find them). */
+    private const val ANTIGEM_LIGHT = "antigem_light"
     private const val ANTIGEM_DARK = "antigem_dark"
 
     /** How many themes at the top of each side's list are marked as recommended (the first is the default). */
@@ -321,7 +326,7 @@ object BuiltInThemes {
 
     /** The original LytsoCoder look, exactly as before themes existed (other Material slots stay at Material's defaults). */
     private fun lytsocoder(dark: Boolean) = AppTheme(
-        id = if (dark) ANTIGEM_DARK else LIGHT_DEFAULT,
+        id = if (dark) ANTIGEM_DARK else ANTIGEM_LIGHT,
         name = if (dark) "Amber Night" else "Porcelain",
         dark = dark, builtIn = true,
         about = if (dark) "LytsoCoder's original warm dark look with the amber accent" else "LytsoCoder's original clean light look with the amber accent",
@@ -357,6 +362,37 @@ object BuiltInThemes {
             listOf(0xFF000000, 0xFFCD0000, 0xFF00CD00, 0xFFCDCD00, 0xFF6495ED, 0xFFCD00CD, 0xFF00CDCD, 0xFFE5E5E5,
                 0xFF7F7F7F, 0xFFFF0000, 0xFF00FF00, 0xFFFFFF00, 0xFF5C5CFF, 0xFFFF00FF, 0xFF00FFFF, 0xFFFFFFFF).forEachIndexed { i, v -> put("ansi_$i", v) }
         }
+    )
+
+    /** Crisp white Neon Light theme tuned for strict WCAG AA contrast (>= 4.5:1) across every interactive surface. */
+    private fun neonLight() = AppTheme(
+        id = NEON_LIGHT, name = "Neon Light", dark = false, builtIn = true,
+        about = "Crisp white surfaces with deep electric cyan, magenta and violet accents tuned for WCAG AA readability",
+        colors = linkedMapOf(
+            "primary" to 0xFF006D9C, "on_primary" to 0xFFFFFFFF, "primary_container" to 0xFFD8F3FF, "on_primary_container" to 0xFF003B56,
+            "secondary" to 0xFFC01563, "on_secondary" to 0xFFFFFFFF, "secondary_container" to 0xFFFFDCEB, "on_secondary_container" to 0xFF6B0635,
+            "tertiary" to 0xFF6B21A8, "on_tertiary" to 0xFFFFFFFF, "tertiary_container" to 0xFFEEE2FF, "on_tertiary_container" to 0xFF3B0764,
+            "background" to 0xFFF7F9FC, "on_background" to 0xFF0A1020, "surface" to 0xFFFFFFFF, "on_surface" to 0xFF0A1020,
+            "surface_variant" to 0xFFE8EFF8, "on_surface_variant" to 0xFF42506A, "surface_container_lowest" to 0xFFFFFFFF,
+            "surface_container_low" to 0xFFF2F6FB, "surface_container" to 0xFFFFFFFF, "surface_container_high" to 0xFFEBF1F8,
+            "surface_container_highest" to 0xFFE1EAF4, "outline" to 0xFF64748B, "outline_variant" to 0xFFD5DFEC, "error" to 0xFFC81E3A,
+            "on_error" to 0xFFFFFFFF, "error_container" to 0xFFFFE0E6, "on_error_container" to 0xFF6B0A1B, "inverse_surface" to 0xFF0F172A,
+            "inverse_on_surface" to 0xFFF8FAFC, "inverse_primary" to 0xFF38BDF8, "card" to 0xFFFFFFFF, "text_secondary" to 0xFF42506A,
+            "user_bubble" to 0xFFE4F0FB, "thinking_bg" to 0xFFEEF4FA, "code_bg" to 0xFF0B1020, "code_text" to 0xFFEDF2FF, "success" to 0xFF0D7A5F,
+            "warning" to 0xFFB45309, "danger" to 0xFFC81E3A, "info" to 0xFF0369A1, "accent_alt" to 0xFF6B21A8, "syntax_keyword" to 0xFFFF4DA6,
+            "syntax_type" to 0xFF38BDF8, "syntax_string" to 0xFF34D399, "syntax_number" to 0xFFFBBF24, "syntax_comment" to 0xFF7B86A8,
+            "syntax_function" to 0xFFC084FC, "syntax_annotation" to 0xFFFDE047, "syntax_punctuation" to 0xFFCBD5E1, "syntax_control" to 0xFFFF4DA6,
+            "syntax_tag" to 0xFFC084FC, "syntax_attribute" to 0xFF38BDF8, "border" to 0xFFD5DFEC, "fill" to 0xFFEDF2F8,
+            "success_container" to 0xFFD6F5EC, "warning_container" to 0xFFFEF0D6, "danger_container" to 0xFFFFE0E6, "info_container" to 0xFFD8F0FF,
+            "accent_indigo" to 0xFF4F46E5, "accent_teal" to 0xFF0E7490, "accent_pink" to 0xFFC01563, "editor_bg" to 0xFF0B1020,
+            "editor_panel" to 0xFF11182C, "editor_text" to 0xFFEDF2FF, "editor_muted" to 0xFF7B86A8, "editor_border" to 0xFF23304C,
+            "editor_selection" to 0xFF164E63, "editor_line" to 0xFF162038, "editor_added_bg" to 0xFF0D3326, "editor_added_text" to 0xFF8CFFD4,
+            "editor_removed_bg" to 0xFF3F1220, "editor_removed_text" to 0xFFFFA3BA, "editor_info_bg" to 0xFF0E2C47, "editor_info_text" to 0xFF8FD9FF,
+            "terminal_bg" to 0xFF0B1020, "terminal_fg" to 0xFFEDF2FF, "terminal_cursor" to 0xFF38BDF8, "ansi_0" to 0xFF1E293B,
+            "ansi_1" to 0xFFFB7185, "ansi_2" to 0xFF34D399, "ansi_3" to 0xFFFBBF24, "ansi_4" to 0xFF38BDF8, "ansi_5" to 0xFFC084FC,
+            "ansi_6" to 0xFF22D3EE, "ansi_7" to 0xFFE2E8F0, "ansi_8" to 0xFF64748B, "ansi_9" to 0xFFFDA4AF, "ansi_10" to 0xFF6EE7B7,
+            "ansi_11" to 0xFFFDE68A, "ansi_12" to 0xFF7DD3FC, "ansi_13" to 0xFFD8B4FE, "ansi_14" to 0xFF67E8F9, "ansi_15" to 0xFFFFFFFF
+        )
     )
 
     /** Special true #000000 AMOLED black theme with vibrant Neon Rainbow accents and prismatic highlights. */
@@ -441,6 +477,7 @@ object BuiltInThemes {
     val all: List<AppTheme> by lazy {
         listOf(
             // light, best first: the first is the default and the first RECOMMENDED_COUNT are marked as recommended
+            neonLight(),
             lytsocoder(false),
             seeded("lavender", "Lavender", "Soft lilac with a violet accent", false,
                 0xFFF8F6FD, 0xFFF8F6FD, 0xFFFFFFFF, 0xFFECE7F8, 0xFF241B3A, 0xFF655B7F,

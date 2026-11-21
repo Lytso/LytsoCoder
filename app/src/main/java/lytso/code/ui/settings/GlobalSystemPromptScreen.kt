@@ -164,10 +164,13 @@ fun GlobalSystemPromptScreen(onOpenGlobalContext: (() -> Unit)? = null) {
                             ).show()
                         },
                         enabled = hasUnsavedChanges,
-                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Save Global", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("Save Global", fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -252,16 +255,16 @@ private fun PriorityStepRow(step: String, title: String, detail: String) {
         Box(
             modifier = Modifier
                 .padding(top = 2.dp)
-                .size(20.dp)
+                .size(22.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(ClaudeTerracotta.copy(alpha = 0.16f)),
+                .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
-            Text(step, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = ClaudeTerracotta)
+            Text(step, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
             Text(detail, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -272,13 +275,22 @@ private fun GuideComparisonItem(badge: String, title: String, description: Strin
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.55f))
-            .padding(10.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f))
+            .padding(12.dp)
     ) {
-        Text(badge, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = ClaudeTerracotta)
-        Spacer(Modifier.height(2.dp))
-        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            text = badge,
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .padding(horizontal = 7.dp, vertical = 2.dp)
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
         Spacer(Modifier.height(2.dp))
         Text(description, fontSize = 12.sp, lineHeight = 16.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

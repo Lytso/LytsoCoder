@@ -59,7 +59,6 @@ class MainActivity : ComponentActivity() {
         lytso.code.data.jarvis.JarvisPreferences.init(this)
         lytso.code.data.context.GlobalContext.init(this)
         lytso.code.data.memory.AgentMemory.init(this)
-        lytso.code.data.egm.EgmManager.init(this)
         lytso.code.data.remote.inspector.NetworkInspectorManager.isEnabled =
             chatViewModel.authPreferences.getNetworkInspectorEnabledSync()
         lytso.code.data.remote.inspector.NetworkInspectorManager.isFloatingBubbleEnabled =
@@ -658,13 +657,6 @@ class MainActivity : ComponentActivity() {
                                         onClick = { showNetworkInspectorDialog = true }
                                     )
                                 }
-
-                                // Gemmy: floating cartoon buddy (drag/fling, tap, double-tap, long-press menu; reacts to the agent working).
-                                // Shown after its one-time intro was answered and while on in Settings → Appearance.
-                                lytso.code.ui.components.GemmyOverlay(
-                                    prefs = chatViewModel.authPreferences,
-                                    agentWorking = chatViewModel.isCurrentChatActivelyRunning
-                                )
 
                                 // Global Network Inspector Dialog
                                 if (showNetworkInspectorDialog) {

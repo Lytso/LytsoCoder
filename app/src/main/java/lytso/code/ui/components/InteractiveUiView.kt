@@ -181,7 +181,7 @@ fun InteractiveUiView(
                                 text = "App",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (selectedTab == 0) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                color = if (selectedTab == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                             )
                         }
                         Box(
@@ -195,7 +195,7 @@ fun InteractiveUiView(
                                 text = "Code",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (selectedTab == 1) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                color = if (selectedTab == 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                             )
                         }
                     }

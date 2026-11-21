@@ -165,7 +165,7 @@ fun SummaryModelPickerDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = { onSelectModel(selectedModelId) },
-                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text("Start Summarize", fontSize = 13.sp)

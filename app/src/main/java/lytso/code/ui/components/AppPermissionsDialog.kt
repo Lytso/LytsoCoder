@@ -354,7 +354,7 @@ fun AppPermissionsDialog(
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = ClaudeTerracotta,
-                        contentColor = Color.White,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
                         disabledContainerColor = AppColors.fill,
                         disabledContentColor = AppColors.textSecondary
                     )

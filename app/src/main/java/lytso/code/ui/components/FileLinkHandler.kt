@@ -231,7 +231,7 @@ fun FileDetailsDialog(
                             else -> onOpenWith(details.fullPath)
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Icon(
                         imageVector = when {

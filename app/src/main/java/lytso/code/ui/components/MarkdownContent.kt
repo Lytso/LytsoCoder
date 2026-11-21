@@ -783,7 +783,7 @@ fun MermaidDiagramView(
                             text = "Diagram",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (selectedTab == 0) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            color = if (selectedTab == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
                     }
 
@@ -798,7 +798,7 @@ fun MermaidDiagramView(
                             text = "Code",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (selectedTab == 1) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            color = if (selectedTab == 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
                     }
                 }
@@ -989,7 +989,7 @@ fun MermaidFullscreenDialog(
                                 text = "Diagram",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (selectedTab == 0) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                color = if (selectedTab == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                             )
                         }
 
@@ -1004,7 +1004,7 @@ fun MermaidFullscreenDialog(
                                 text = "Code",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (selectedTab == 1) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                color = if (selectedTab == 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                             )
                         }
                     }

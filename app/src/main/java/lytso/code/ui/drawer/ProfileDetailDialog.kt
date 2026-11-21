@@ -120,7 +120,7 @@ fun ProfileDetailDialog(
                                 text = initial,
                                 fontSize = 32.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
                     },
@@ -136,7 +136,7 @@ fun ProfileDetailDialog(
                                 text = initial,
                                 fontSize = 32.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
                     }

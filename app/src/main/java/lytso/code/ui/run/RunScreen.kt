@@ -464,7 +464,7 @@ private fun CommandsView(
 
         HorizontalDivider(color = AppColors.editorBorder, thickness = 0.5.dp)
         Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.End) {
-            Button(onClick = onNew, colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)) {
+            Button(onClick = onNew, colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)) {
                 Icon(Icons.Filled.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("New command")
             }
         }
@@ -712,7 +712,7 @@ private fun CommandEditorDialog(
                     Spacer(Modifier.width(6.dp))
                     Button(
                         enabled = canSave,
-                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                         onClick = {
                             val base = edit.config ?: RunConfiguration(name = name.trim())
                             onSave(base.copy(name = name.trim(), type = "terminal", command = command.trim(), cwd = cwd.trim().ifBlank { null }), global)
@@ -910,7 +910,7 @@ private fun RunBubble(runs: List<RunEntry>, seen: Set<String>) {
                 Box(
                     Modifier.align(Alignment.TopEnd).size(20.dp).clip(CircleShape).background(ClaudeTerracotta),
                     contentAlignment = Alignment.Center
-                ) { Text("$running", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+                ) { Text("$running", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary) }
             }
         }
     }

@@ -221,30 +221,40 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
 
                 TabRow(
                     selectedTabIndex = selectedTab,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                    contentColor = ClaudeTerracotta,
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clip(RoundedCornerShape(10.dp))
                 ) {
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
+                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         text = {
-                            Text(
-                                text = "🧠 Active Prompt",
-                                fontSize = 12.5.sp,
-                                fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Outlined.Psychology, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Text(
+                                    text = "Active Prompt",
+                                    fontSize = 12.5.sp,
+                                    fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium
+                                )
+                            }
                         }
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
+                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         text = {
-                            Text(
-                                text = "✍️ Custom Override",
-                                fontSize = 12.5.sp,
-                                fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Text(
+                                    text = "Custom Override",
+                                    fontSize = 12.5.sp,
+                                    fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium
+                                )
+                            }
                         }
                     )
                 }
@@ -356,12 +366,15 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                                     }
                                     selectedTab = 1
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
-                                shape = RoundedCornerShape(8.dp)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                shape = RoundedCornerShape(10.dp)
                             ) {
-                                Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color.White)
+                                Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Edit as override", fontSize = 12.5.sp, color = Color.White)
+                                Text("Edit as override", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
                             }
                         } else if (selectedTab == 1) {
                             if (onSaveGlobalPrompt != null && promptText.isNotBlank()) {
@@ -370,10 +383,10 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                                         onSaveGlobalPrompt(promptText.trim())
                                         onDismiss()
                                     },
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = RoundedCornerShape(10.dp),
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                                 ) {
-                                    Text("Set Global", fontSize = 12.sp)
+                                    Text("Set Global", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                                 }
                             }
                             Button(
@@ -381,14 +394,17 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                                     onSavePrompt(promptText.ifBlank { null })
                                     onDismiss()
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                             ) {
                                 Text(
                                     if (promptText.isBlank()) "Use Global/Default" else "Save Chat",
                                     fontSize = 12.5.sp,
-                                    color = Color.White
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
                         }

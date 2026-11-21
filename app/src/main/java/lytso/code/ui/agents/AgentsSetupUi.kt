@@ -172,8 +172,7 @@ fun AgentsSettingsPage(
     modifier: Modifier = Modifier,
     onOpenGlobalSystemPrompt: (() -> Unit)? = null,
     onOpenGlobalContext: (() -> Unit)? = null,
-    onOpenAgentMemory: (() -> Unit)? = null,
-    onOpenEgm: (() -> Unit)? = null
+    onOpenAgentMemory: (() -> Unit)? = null
 ) {
     var selected by remember(enabled) { mutableStateOf(enabled) }
     var confirm by remember { mutableStateOf(false) }
@@ -195,7 +194,7 @@ fun AgentsSettingsPage(
             modifier = Modifier.fillMaxWidth()
         ) {
             if (isApplying) {
-                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                 Spacer(Modifier.width(10.dp))
                 Text("Restarting…")
             } else {
@@ -213,10 +212,6 @@ fun AgentsSettingsPage(
         if (onOpenAgentMemory != null) {
             Spacer(Modifier.height(12.dp))
             lytso.code.ui.settings.AgentMemoryEntryRow(onClick = onOpenAgentMemory)
-        }
-        if (onOpenEgm != null) {
-            Spacer(Modifier.height(12.dp))
-            lytso.code.ui.settings.EgmEntryRow(onClick = onOpenEgm)
         }
         Spacer(Modifier.height(12.dp))
         val vibrateOnDone by lytso.code.data.agent.ChatCompletionMonitor.vibrate.collectAsState()

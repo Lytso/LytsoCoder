@@ -281,7 +281,7 @@ fun ContextSummarizeAlertBanner(
 
                 Button(
                     onClick = onSummarizeNow,
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.height(32.dp)
@@ -435,7 +435,7 @@ fun EditSummaryDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = { onSave(editedText.trim()) },
-                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text("Save Summary")

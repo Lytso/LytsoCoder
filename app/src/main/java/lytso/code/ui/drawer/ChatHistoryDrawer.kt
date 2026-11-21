@@ -1370,7 +1370,7 @@ fun ChatHistoryDrawer(
                                                     text = initial,
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = Color.White
+                                                    color = MaterialTheme.colorScheme.onPrimary
                                                 )
                                             }
                                         },
@@ -1387,7 +1387,7 @@ fun ChatHistoryDrawer(
                                                     text = initial,
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = Color.White
+                                                    color = MaterialTheme.colorScheme.onPrimary
                                                 )
                                             }
                                         }

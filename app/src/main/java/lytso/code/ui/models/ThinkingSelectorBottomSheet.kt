@@ -183,7 +183,7 @@ fun ThinkingSelectorBottomSheet(
                                     onDismiss()
                                 },
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Text("Apply Custom Budget", fontWeight = FontWeight.Bold)

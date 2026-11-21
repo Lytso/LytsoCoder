@@ -250,7 +250,7 @@ fun TerminalLauncherOnboardingDialog(
                             checked = isEnabled,
                             onCheckedChange = { isEnabled = it },
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                                 checkedTrackColor = ClaudeTerracotta
                             )
                         )

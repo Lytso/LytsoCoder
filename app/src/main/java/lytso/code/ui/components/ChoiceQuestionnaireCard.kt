@@ -336,7 +336,7 @@ fun ChoiceQuestionnaireCard(
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = ClaudeTerracotta,
                                 disabledContainerColor = ClaudeTerracotta.copy(alpha = 0.3f),
-                                contentColor = Color.White,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
                                 disabledContentColor = Color.White.copy(alpha = 0.5f)
                             ),
                             shape = RoundedCornerShape(8.dp),
