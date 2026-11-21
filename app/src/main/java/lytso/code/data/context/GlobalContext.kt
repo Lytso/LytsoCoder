@@ -243,7 +243,7 @@ object GlobalContext {
         val blocks = mutableListOf<String>()
         val chatPrompt = chatSystemPrompt(chatId)
         if (!chatPrompt.isNullOrBlank()) {
-            blocks += "[Chat-specific system prompt]\n$chatPrompt"
+            blocks += "[Chat system prompt, set by the user for this chat. It REPLACES your default persona, style and system instructions wherever they differ (keep only your tool and safety rules). Follow it strictly in every reply.]\n$chatPrompt"
         }
         val own = active().filter { it.everyMessage }
         if (own.isNotEmpty()) {

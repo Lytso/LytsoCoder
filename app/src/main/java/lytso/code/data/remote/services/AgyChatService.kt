@@ -204,17 +204,12 @@ class AgyChatService {
                         is_google = false,
                         is_interactive = true
                     )
-                ),
-                prompt_section_customization = customSystemPrompt?.trim()?.takeIf { it.isNotBlank() }?.let { prompt ->
-                    PromptSectionCustomizationConfig(
-                        append_prompt_sections = listOf(
-                            PromptSection(
-                                title = "User System Prompt",
-                                content = prompt
-                            )
-                        )
-                    )
-                }
+                )
+                // No prompt_section_customization here: the language server rejects a CustomAgentSpec that carries
+                // anything but builtin_agent ("CustomAgentSpec is only allowed to specify builtin_agent unless
+                // specified by or forwarded to an SDK executable"), which failed every message of a chat that had a
+                // custom system prompt. The chat's system prompt reaches the model hidden in front of the message
+                // instead (GlobalContext.everyMessageBody), so [customSystemPrompt] is not sent through the spec.
             ),
             delivery_strategy = deliveryStrategy,
             tags = if (clientMessageId.isNullOrBlank()) emptyList() else listOf(clientMsgTag(clientMessageId)),

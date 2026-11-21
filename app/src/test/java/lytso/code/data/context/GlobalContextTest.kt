@@ -75,6 +75,7 @@ class GlobalContextTest {
         val (turn1, fp1) = GlobalContext.wrap("chat-main", hasEarlierMessages = false, text = "Olá")
         assertNull(fp1)
         assertTrue(turn1.contains("Always answer in concise Portuguese."))
+        assertTrue(turn1.contains("REPLACES your default persona"))
         assertTrue(turn1.contains("Olá"))
 
         val (turn2, fp2) = GlobalContext.wrap("chat-main", hasEarlierMessages = true, text = "Continuar")

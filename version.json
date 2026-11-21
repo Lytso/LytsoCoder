@@ -1,8 +1,9 @@
 {
-  "version_code": 136,
-  "version_name": "2.0.5",
+  "version_code": 137,
+  "version_name": "2.0.6",
   "min_supported_version_code": 2,
   "changelog": [
+    "Fixed the \"CustomAgentSpec is only allowed to specify builtin_agent\" delivery error on chats with a Chat System Prompt: the prompt is now injected hidden in front of the message and framed as replacing the default persona",
     "Fixed \"Rewind & resend\" on the first message of a chat: its text (and files) now land in the message box instead of being wiped when the chat switches to a fresh one",
     "Much faster CI/release builds: arm64 and x86_64 build in parallel on separate runners, unit tests and Go tests run alongside, and the Go bridge build is now incremental and cacheable",
     "Fixed user message editing showing hidden <lytsocoder-expansion> / <antigem-expansion> app context blocks instead of only the user's message",
