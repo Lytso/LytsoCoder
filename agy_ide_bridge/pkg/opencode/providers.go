@@ -165,7 +165,16 @@ func (m *Manager) writeConfig() error {
 	if !lmstudioTaken {
 		providers["lmstudio"] = map[string]interface{}{"settings": map[string]interface{}{"baseURL": ""}}
 	}
-	cfg := map[string]interface{}{"$schema": "https://opencode.ai/config.json", "providers": providers}
+	if err := m.ensureSystemPromptPlugin(); err != nil {
+		return fmt.Errorf("writing the OpenCode system-prompt plugin: %w", err)
+	}
+	cfg := map[string]interface{}{
+		"$schema":   "https://opencode.ai/config.json",
+		"providers": providers,
+		// Disable OpenCode's built-in "# Your Model" identity injection and attach LytsoCoder's
+		// live system-prompt plugin (per-chat > global > default base prompt in real time).
+		"plugins": []string{"-opencode.prompt.identity", m.systemPromptPluginDir()},
+	}
 	if !lmstudioTaken {
 		cfg["disabled_providers"] = []string{"lmstudio"}
 	}

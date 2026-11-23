@@ -658,10 +658,12 @@ fun SettingsDialog(
                         onOpenAgentMemory = { currentSection = SettingsSection.AGENT_MEMORY }
                     )
                     SettingsSection.GLOBAL_SYSTEM_PROMPT -> PromptsAndContextScreen(
-                        initialTab = PromptsHubTab.IDENTITY
+                        initialTab = PromptsHubTab.IDENTITY,
+                        onSyncOpenCodeGlobalPrompt = { openCode?.syncGlobalSystemPrompt(it) }
                     )
                     SettingsSection.GLOBAL_CONTEXT -> PromptsAndContextScreen(
-                        initialTab = PromptsHubTab.BUILT_IN
+                        initialTab = PromptsHubTab.BUILT_IN,
+                        onSyncOpenCodeGlobalPrompt = { openCode?.syncGlobalSystemPrompt(it) }
                     )
                     SettingsSection.AI_PERMISSIONS -> AiPermissionsAndExplorerScreen(
                         cardBg = cardBg,
@@ -905,7 +907,8 @@ private fun MainSettingsMenu(
     }
 
     val globalSysPrompt by lytso.code.data.context.GlobalContext.globalSystemPrompt.collectAsState()
-    val hasGlobalSysPrompt = !globalSysPrompt.isNullOrBlank()
+    val openCodeGlobalSysPrompt by lytso.code.data.context.GlobalContext.openCodeGlobalSystemPrompt.collectAsState()
+    val hasGlobalSysPrompt = !globalSysPrompt.isNullOrBlank() || !openCodeGlobalSysPrompt.isNullOrBlank()
     val builtInCtxOn by lytso.code.data.context.GlobalContext.builtInEnabled.collectAsState()
     val currentThemeName = lytso.code.theme.ThemeManager.current.name
     val isRainbow = lytso.code.theme.ThemeManager.isRainbowAmoled

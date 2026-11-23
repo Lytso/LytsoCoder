@@ -26,15 +26,19 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import lytso.code.data.agent.opencode.OpenCodeBridgeClient
 import lytso.code.data.context.GlobalContext
 import lytso.code.theme.ClaudeTerracotta
+import lytso.code.ui.components.OpenCodeAccent
 import lytso.code.ui.components.bouncyVerticalScroll
+import kotlinx.coroutines.launch
 
 /** The row on Settings → Agents that opens [GlobalSystemPromptScreen]. */
 @Composable
 fun GlobalSystemPromptEntryRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val globalPrompt by GlobalContext.globalSystemPrompt.collectAsState()
-    val isActive = !globalPrompt.isNullOrBlank()
+    val openCodeGlobalPrompt by GlobalContext.openCodeGlobalSystemPrompt.collectAsState()
+    val isActive = !globalPrompt.isNullOrBlank() || !openCodeGlobalPrompt.isNullOrBlank()
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
@@ -77,11 +81,26 @@ fun GlobalSystemPromptEntryRow(onClick: () -> Unit, modifier: Modifier = Modifie
 @Composable
 fun GlobalSystemPromptScreen(onOpenGlobalContext: (() -> Unit)? = null) {
     val context = LocalContext.current
-    val savedGlobal by GlobalContext.globalSystemPrompt.collectAsState()
-    var draft by remember(savedGlobal) { mutableStateOf(savedGlobal.orEmpty()) }
+    val scope = rememberCoroutineScope()
+    var selectedAgent by remember { mutableStateOf(0) } // 0 = Antigravity, 1 = OpenCode
+    val isOpenCode = selectedAgent == 1
+    val savedAgyGlobal by GlobalContext.globalSystemPrompt.collectAsState()
+    val savedOpenCodeGlobal by GlobalContext.openCodeGlobalSystemPrompt.collectAsState()
+    val savedGlobal = if (isOpenCode) savedOpenCodeGlobal else savedAgyGlobal
+    var draft by remember(selectedAgent, savedGlobal) { mutableStateOf(savedGlobal.orEmpty()) }
     val isActive = !savedGlobal.isNullOrBlank()
     val hasUnsavedChanges = draft.trim() != (savedGlobal ?: "")
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val accentColor = if (isOpenCode) OpenCodeAccent else ClaudeTerracotta
+
+    fun applyGlobal(cleaned: String?) {
+        if (isOpenCode) {
+            GlobalContext.setOpenCodeGlobalSystemPrompt(cleaned)
+            scope.launch { runCatching { OpenCodeBridgeClient().setGlobalSystemPrompt(cleaned) } }
+        } else {
+            GlobalContext.setGlobalSystemPrompt(cleaned)
+        }
+    }
 
     Column(
         Modifier
@@ -89,6 +108,35 @@ fun GlobalSystemPromptScreen(onOpenGlobalContext: (() -> Unit)? = null) {
             .bouncyVerticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
+        // Agent selector (Antigravity vs OpenCode)
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(Modifier.padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf(0 to "Antigravity", 1 to "OpenCode").forEach { (idx, label) ->
+                    val selected = selectedAgent == idx
+                    Surface(
+                        onClick = { selectedAgent = idx },
+                        shape = RoundedCornerShape(9.dp),
+                        color = if (selected) (if (idx == 1) OpenCodeAccent else ClaudeTerracotta) else Color.Transparent,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = label,
+                                fontSize = 12.5.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selected) Color.White else muted
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
         // ----- Status & Editor -----
         Surface(
             shape = RoundedCornerShape(16.dp),
@@ -98,12 +146,20 @@ fun GlobalSystemPromptScreen(onOpenGlobalContext: (() -> Unit)? = null) {
             Column(Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Global System Prompt", fontSize = 15.5.sp, fontWeight = FontWeight.SemiBold)
                         Text(
-                            if (isActive) "Active · replaces default <identity> & persona"
-                            else "Off · chats use the agent's built-in default",
+                            if (isOpenCode) "OpenCode Global System Prompt" else "Antigravity Global System Prompt",
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            when {
+                                isOpenCode && isActive -> "Active · replaces OpenCode initial prompt (parts[0]) · # Your Model hidden"
+                                isOpenCode -> "Off · OpenCode uses its default harness prompt · # Your Model hidden"
+                                isActive -> "Active · replaces default <identity> & persona"
+                                else -> "Off · chats use the agent's built-in default"
+                            },
                             fontSize = 12.sp,
-                            color = if (isActive) ClaudeTerracotta else muted,
+                            color = if (isActive) accentColor else muted,
                             fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal
                         )
                     }
@@ -163,7 +219,7 @@ fun GlobalSystemPromptScreen(onOpenGlobalContext: (() -> Unit)? = null) {
                         TextButton(
                             onClick = {
                                 draft = ""
-                                GlobalContext.setGlobalSystemPrompt(null)
+                                applyGlobal(null)
                                 Toast.makeText(context, "Global system prompt cleared (using agent default)", Toast.LENGTH_SHORT).show()
                             }
                         ) {
@@ -177,7 +233,7 @@ fun GlobalSystemPromptScreen(onOpenGlobalContext: (() -> Unit)? = null) {
                     Button(
                         onClick = {
                             val cleaned = draft.trim().takeIf { it.isNotBlank() }
-                            GlobalContext.setGlobalSystemPrompt(cleaned)
+                            applyGlobal(cleaned)
                             Toast.makeText(
                                 context,
                                 if (cleaned == null) "Global system prompt cleared" else "Global system prompt saved",

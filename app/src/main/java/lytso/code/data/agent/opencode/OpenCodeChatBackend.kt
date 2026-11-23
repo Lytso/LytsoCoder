@@ -219,6 +219,9 @@ class OpenCodeChatBackend(
         if (loopJob?.isActive == true) return
         loopJob = backendScope.launch {
             refreshStatus()
+            if (_state.value == OpenCodeState.READY) {
+                runCatching { client.setGlobalSystemPrompt(lytso.code.data.context.GlobalContext.openCodeGlobalSystemPrompt.value) }
+            }
             refreshModels()
             refreshAgents()
             refreshSlashCommands()
@@ -712,6 +715,10 @@ class OpenCodeChatBackend(
             val notes = mutableListOf<String>()
             for (a in atts) attachmentPart(a, files, notes)
             val promptText = (listOf(text) + notes).filter { it.isNotBlank() }.joinToString("\n\n")
+            // Sync OpenCode global + per-chat system prompt right before sending so real-time edits always apply on this turn.
+            val globalOcPrompt = lytso.code.data.context.GlobalContext.openCodeGlobalSystemPrompt.value
+            val chatOcPrompt = lytso.code.data.context.GlobalContext.chatSystemPrompt(conv.id) ?: conv.customSystemPrompt
+            runCatching { client.syncSystemPrompts(globalOcPrompt, conv.id, chatOcPrompt) }
             // "/name …" picked from the "/" menu: one of OpenCode's commands runs through its command call (OpenCode
             // stores the command's own prompt as the message, so the typed one is dropped); a skill is attached
             val typed = lytso.code.data.remote.PromptExpansion.collapse(text).trim()
@@ -789,6 +796,7 @@ class OpenCodeChatBackend(
                 _toasts.tryEmit("Could not delete the chat: ${r.exceptionOrNull()?.message}")
                 return@launch
             }
+            runCatching { client.deleteChatSystemPrompt(id) }
             backendScope.launch(worker) {
                 localConversations.remove(id)
                 lastServerList = lastServerList.filter { it.id != id }
@@ -812,6 +820,7 @@ class OpenCodeChatBackend(
                     refreshSessions()
                     if (newId != null) {
                         lytso.code.data.context.GlobalContext.copyChatSystemPrompt(id, newId)
+                        runCatching { client.copyChatSystemPrompt(id, newId) }
                         withContextMain {
                             lytso.code.ui.components.AppToastHelper.showToast(
                                 "Branched conversation · inherited history & chat prompt",
@@ -901,6 +910,21 @@ class OpenCodeChatBackend(
     }
 
     // ------------------------------------------------------------------ chat controls
+
+    fun syncGlobalSystemPrompt(prompt: String?) {
+        backendScope.launch {
+            client.setGlobalSystemPrompt(prompt)
+                .onFailure { Log.w(TAG, "could not sync OpenCode global system prompt: ${it.message}") }
+        }
+    }
+
+    fun syncChatSystemPrompt(sessionId: String, prompt: String?) {
+        if (sessionId.isBlank()) return
+        backendScope.launch {
+            client.setChatSystemPrompt(sessionId, prompt)
+                .onFailure { Log.w(TAG, "could not sync OpenCode chat system prompt: ${it.message}") }
+        }
+    }
 
     fun selectModel(modelId: String) {
         _selectedModelId.value = modelId

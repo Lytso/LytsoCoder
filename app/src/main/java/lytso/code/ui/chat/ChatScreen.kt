@@ -1964,15 +1964,19 @@ fun ChatScreen(
                                 )
                             }
                         }
-                        val globalSysPrompt by lytso.code.data.context.GlobalContext.globalSystemPrompt.collectAsState()
+                        val isOpenCodeConv = currentConv?.agent == lytso.code.domain.model.AgentKind.OPENCODE
+                        val agyGlobalSysPrompt by lytso.code.data.context.GlobalContext.globalSystemPrompt.collectAsState()
+                        val openCodeGlobalSysPrompt by lytso.code.data.context.GlobalContext.openCodeGlobalSystemPrompt.collectAsState()
+                        val activeGlobalSysPrompt = if (isOpenCodeConv) openCodeGlobalSysPrompt else agyGlobalSysPrompt
                         val perChatSysPrompt = currentConv?.customSystemPrompt ?: lytso.code.data.context.GlobalContext.chatSystemPrompt(currentConv?.id)
                         val hasPerChatSysPrompt = !perChatSysPrompt.isNullOrBlank()
-                        val hasGlobalSysPrompt = !globalSysPrompt.isNullOrBlank()
+                        val hasGlobalSysPrompt = !activeGlobalSysPrompt.isNullOrBlank()
                         IconButton(onClick = { showCustomSystemPromptDialog = true }) {
                             Icon(
                                 imageVector = Icons.Outlined.Psychology,
-                                contentDescription = "Edit Chat System Prompt",
+                                contentDescription = if (isOpenCodeConv) "Edit OpenCode System Prompt" else "Edit Chat System Prompt",
                                 tint = when {
+                                    isOpenCodeConv && (hasPerChatSysPrompt || hasGlobalSysPrompt) -> lytso.code.ui.components.OpenCodeAccent
                                     hasPerChatSysPrompt -> ClaudeTerracotta
                                     hasGlobalSysPrompt -> MaterialTheme.colorScheme.primary
                                     else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
@@ -3761,14 +3765,20 @@ fun ChatScreen(
     }
 
     if (showCustomSystemPromptDialog) {
-        val globalSysPrompt by lytso.code.data.context.GlobalContext.globalSystemPrompt.collectAsState()
+        val convAgent = currentConv?.agent ?: lytso.code.domain.model.AgentKind.AGY
+        val isOpenCodeConv = convAgent == lytso.code.domain.model.AgentKind.OPENCODE
+        val agyGlobalSysPrompt by lytso.code.data.context.GlobalContext.globalSystemPrompt.collectAsState()
+        val openCodeGlobalSysPrompt by lytso.code.data.context.GlobalContext.openCodeGlobalSystemPrompt.collectAsState()
+        val openCodeActiveAgent by viewModel.openCodeBackend.agent.collectAsState()
         lytso.code.ui.components.CustomSystemPromptDialog(
             initialPrompt = currentConv?.customSystemPrompt ?: lytso.code.data.context.GlobalContext.chatSystemPrompt(currentConv?.id),
-            globalSystemPrompt = globalSysPrompt,
+            globalSystemPrompt = if (isOpenCodeConv) openCodeGlobalSysPrompt else agyGlobalSysPrompt,
             conversationId = currentConv?.id,
             workspaceDir = currentConv?.workspaceUri,
+            agentKind = convAgent,
+            openCodeAgent = if (isOpenCodeConv) openCodeActiveAgent else null,
             onSavePrompt = { prompt -> viewModel.updateCustomSystemPrompt(prompt) },
-            onSaveGlobalPrompt = { prompt -> viewModel.updateGlobalSystemPrompt(prompt, clearCurrentChatOverride = true) },
+            onSaveGlobalPrompt = { prompt -> viewModel.updateGlobalSystemPrompt(prompt, clearCurrentChatOverride = true, agent = convAgent) },
             onDismiss = { showCustomSystemPromptDialog = false }
         )
     }

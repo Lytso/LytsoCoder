@@ -364,4 +364,95 @@ class OpenCodeBridgeClient(private val bridge: AgyBridgeService = AgyBridgeServi
         if (!r.success) error(r.error ?: "Could not list the models")
         r.models
     }
+
+    // ---- OpenCode live system prompt (replaces systemInstruction.parts[0] in real time; strips # Your Model)
+
+    data class SystemPromptInfo(
+        val defaultBasePrompt: String,
+        val defaultFullPrompt: String,
+        val activeFullPrompt: String,
+        val globalPrompt: String?,
+        val chatPrompt: String?,
+        val effectiveBasePrompt: String,
+        val source: String,
+        val modelIdentityRemoved: Boolean = true
+    )
+
+    suspend fun getSystemPrompt(sessionId: String?, workspaceDir: String?, agent: String?): Result<SystemPromptInfo> = runCatching {
+        val params = buildList {
+            if (!sessionId.isNullOrBlank()) add("sessionId=" + java.net.URLEncoder.encode(sessionId, "UTF-8"))
+            if (!workspaceDir.isNullOrBlank()) add("workspaceDir=" + java.net.URLEncoder.encode(workspaceDir, "UTF-8"))
+            if (!agent.isNullOrBlank()) add("agent=" + java.net.URLEncoder.encode(agent, "UTF-8"))
+        }
+        val qs = if (params.isEmpty()) "" else "?" + params.joinToString("&")
+        val o = OpenCodeJson.parseToJsonElement(execute(Request.Builder().url(url("/system-prompt$qs")).get().build())).obj()
+        if (o.bool("success") == false) error(o.str("error") ?: "Could not load OpenCode system prompt")
+        SystemPromptInfo(
+            defaultBasePrompt = o.str("defaultBasePrompt").orEmpty(),
+            defaultFullPrompt = o.str("defaultFullPrompt").orEmpty(),
+            activeFullPrompt = o.str("activeFullPrompt").orEmpty(),
+            globalPrompt = o.str("globalPrompt")?.takeIf { it.isNotBlank() },
+            chatPrompt = o.str("chatPrompt")?.takeIf { it.isNotBlank() },
+            effectiveBasePrompt = o.str("effectiveBasePrompt").orEmpty(),
+            source = o.str("source") ?: "default",
+            modelIdentityRemoved = o.bool("modelIdentityRemoved") ?: true
+        )
+    }
+
+    suspend fun setGlobalSystemPrompt(prompt: String?): Result<Unit> = runCatching {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("scope", kotlinx.serialization.json.JsonPrimitive("global"))
+            put("prompt", kotlinx.serialization.json.JsonPrimitive(prompt?.trim().orEmpty()))
+        }
+        val o = OpenCodeJson.parseToJsonElement(
+            execute(Request.Builder().url(url("/system-prompt")).put(OpenCodeJson.encodeToString(JsonElement.serializer(), body).toRequestBody(jsonType)).build())
+        ).obj()
+        if (o.bool("success") != true) error(o.str("error") ?: "Could not save OpenCode global system prompt")
+    }
+
+    suspend fun setChatSystemPrompt(sessionId: String, prompt: String?): Result<Unit> = runCatching {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("scope", kotlinx.serialization.json.JsonPrimitive("chat"))
+            put("sessionId", kotlinx.serialization.json.JsonPrimitive(sessionId))
+            put("prompt", kotlinx.serialization.json.JsonPrimitive(prompt?.trim().orEmpty()))
+        }
+        val o = OpenCodeJson.parseToJsonElement(
+            execute(Request.Builder().url(url("/system-prompt")).put(OpenCodeJson.encodeToString(JsonElement.serializer(), body).toRequestBody(jsonType)).build())
+        ).obj()
+        if (o.bool("success") != true) error(o.str("error") ?: "Could not save OpenCode chat system prompt")
+    }
+
+    suspend fun syncSystemPrompts(globalPrompt: String?, sessionId: String?, chatPrompt: String?): Result<Unit> = runCatching {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("scope", kotlinx.serialization.json.JsonPrimitive("sync"))
+            put("global", kotlinx.serialization.json.JsonPrimitive(globalPrompt?.trim().orEmpty()))
+            if (!sessionId.isNullOrBlank()) {
+                put("sessionId", kotlinx.serialization.json.JsonPrimitive(sessionId))
+                put("chat", kotlinx.serialization.json.JsonPrimitive(chatPrompt?.trim().orEmpty()))
+            }
+        }
+        val o = OpenCodeJson.parseToJsonElement(
+            execute(Request.Builder().url(url("/system-prompt")).put(OpenCodeJson.encodeToString(JsonElement.serializer(), body).toRequestBody(jsonType)).build())
+        ).obj()
+        if (o.bool("success") != true) error(o.str("error") ?: "Could not sync OpenCode system prompts")
+    }
+
+    suspend fun copyChatSystemPrompt(fromSessionId: String, toSessionId: String): Result<Unit> = runCatching {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("scope", kotlinx.serialization.json.JsonPrimitive("copy"))
+            put("fromSessionId", kotlinx.serialization.json.JsonPrimitive(fromSessionId))
+            put("toSessionId", kotlinx.serialization.json.JsonPrimitive(toSessionId))
+        }
+        execute(Request.Builder().url(url("/system-prompt")).put(OpenCodeJson.encodeToString(JsonElement.serializer(), body).toRequestBody(jsonType)).build())
+        Unit
+    }
+
+    suspend fun deleteChatSystemPrompt(sessionId: String): Result<Unit> = runCatching {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("scope", kotlinx.serialization.json.JsonPrimitive("delete"))
+            put("sessionId", kotlinx.serialization.json.JsonPrimitive(sessionId))
+        }
+        execute(Request.Builder().url(url("/system-prompt")).put(OpenCodeJson.encodeToString(JsonElement.serializer(), body).toRequestBody(jsonType)).build())
+        Unit
+    }
 }

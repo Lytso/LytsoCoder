@@ -168,11 +168,12 @@ fun ChatTelemetryDialog(
                             TelemetryRow(label = "Model Responses", value = "$assistantMessagesCount responses")
                             TelemetryRow(label = "Tools Executed", value = "$toolsExecutedCount tools")
                             TelemetryRow(label = "Active Context Summary", value = if (!conversation?.summary.isNullOrBlank()) "Active" else "None")
+                            val isOpenCode = conversation?.agent == lytso.code.domain.model.AgentKind.OPENCODE
                             val perChatActive = !(conversation?.customSystemPrompt ?: lytso.code.data.context.GlobalContext.chatSystemPrompt(conversation?.id)).isNullOrBlank()
-                            val globalActive = !lytso.code.data.context.GlobalContext.globalSystemPrompt.value.isNullOrBlank()
+                            val globalActive = !(if (isOpenCode) lytso.code.data.context.GlobalContext.openCodeGlobalSystemPrompt.value else lytso.code.data.context.GlobalContext.globalSystemPrompt.value).isNullOrBlank()
                             val promptStatusLabel = when {
                                 perChatActive -> "Per-chat override"
-                                globalActive -> "Global default"
+                                globalActive -> if (isOpenCode) "OpenCode global" else "Global default"
                                 else -> "Agent default"
                             }
                             TelemetryRow(label = "System Prompt", value = promptStatusLabel)
@@ -207,12 +208,13 @@ fun ChatTelemetryDialog(
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
+                                val isOpenCode2 = conversation?.agent == lytso.code.domain.model.AgentKind.OPENCODE
                                 val perChatActive2 = !(conversation?.customSystemPrompt ?: lytso.code.data.context.GlobalContext.chatSystemPrompt(conversation?.id)).isNullOrBlank()
-                                val globalActive2 = !lytso.code.data.context.GlobalContext.globalSystemPrompt.value.isNullOrBlank()
+                                val globalActive2 = !(if (isOpenCode2) lytso.code.data.context.GlobalContext.openCodeGlobalSystemPrompt.value else lytso.code.data.context.GlobalContext.globalSystemPrompt.value).isNullOrBlank()
                                 Text(
                                     text = when {
                                         perChatActive2 -> "Per-chat override active"
-                                        globalActive2 -> "Using Global system prompt"
+                                        globalActive2 -> if (isOpenCode2) "Using OpenCode Global prompt" else "Using Global system prompt"
                                         else -> "Using agent default system instruction"
                                     },
                                     fontSize = 11.sp,

@@ -581,12 +581,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun withGlobalContext(chatId: String?, text: String): String {
         val hasEarlier = messages.value.any { m -> m.role == MessageRole.USER }
         val conv = currentConversation.value
-        val usesNativeCustomAgent = !isClaudeActive && !isOpenCodeActive && !isCodexActive && conv?.isCloud != true
+        // Local Antigravity (CustomAgentConfig) and OpenCode (live system-prompt plugin) replace the real system
+        // prompt natively, so never duplicate [Chat system prompt] inside user messages for them.
+        val usesNativeSystemPrompt = !isClaudeActive && !isCodexActive && conv?.isCloud != true
         val (prompt, fingerprint) = lytso.code.data.context.GlobalContext.wrap(
             chatId = chatId,
             hasEarlierMessages = hasEarlier,
             text = text,
-            includeChatSystemPrompt = !usesNativeCustomAgent
+            includeChatSystemPrompt = !usesNativeSystemPrompt
         )
         if (fingerprint != null && chatId.isNullOrBlank()) {
             viewModelScope.launch {
@@ -1332,28 +1334,45 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val updated = conv.copy(customSystemPrompt = cleaned)
         _currentConversation.value = updated
         _conversations.value = _conversations.value.map { if (it.id == updated.id) updated else it }
+        if (conv.agent == AgentKind.OPENCODE) {
+            openCodeBackend.syncChatSystemPrompt(conv.id, cleaned)
+        }
         lytso.code.ui.components.AppToastHelper.showToast(
             if (cleaned == null) "Per-chat override cleared" else "Saved for this chat",
             lytso.code.ui.components.ChatToastType.SUCCESS
         )
     }
 
-    fun updateGlobalSystemPrompt(prompt: String?, clearCurrentChatOverride: Boolean = true) {
+    fun updateGlobalSystemPrompt(
+        prompt: String?,
+        clearCurrentChatOverride: Boolean = true,
+        agent: AgentKind? = _currentConversation.value?.agent
+    ) {
         val cleaned = if (prompt.isNullOrBlank()) null else prompt.trim()
-        lytso.code.data.context.GlobalContext.setGlobalSystemPrompt(cleaned)
+        val isOpenCode = agent == AgentKind.OPENCODE
+        if (isOpenCode) {
+            lytso.code.data.context.GlobalContext.setOpenCodeGlobalSystemPrompt(cleaned)
+            openCodeBackend.syncGlobalSystemPrompt(cleaned)
+        } else {
+            lytso.code.data.context.GlobalContext.setGlobalSystemPrompt(cleaned)
+        }
         if (clearCurrentChatOverride) {
             _currentConversation.value?.let { conv ->
-                lytso.code.data.context.GlobalContext.setChatSystemPrompt(conv.id, null)
-                val updated = conv.copy(customSystemPrompt = null)
-                _currentConversation.value = updated
-                _conversations.value = _conversations.value.map { if (it.id == updated.id) updated else it }
+                if ((conv.agent == AgentKind.OPENCODE) == isOpenCode) {
+                    lytso.code.data.context.GlobalContext.setChatSystemPrompt(conv.id, null)
+                    if (isOpenCode) openCodeBackend.syncChatSystemPrompt(conv.id, null)
+                    val updated = conv.copy(customSystemPrompt = null)
+                    _currentConversation.value = updated
+                    _conversations.value = _conversations.value.map { if (it.id == updated.id) updated else it }
+                }
             }
         }
+        val label = if (isOpenCode) "OpenCode Global System Prompt" else "Global System Prompt"
         lytso.code.ui.components.AppToastHelper.showToast(
             if (cleaned == null) {
-                "Global system prompt cleared (using agent default)"
+                "$label cleared (using agent default)"
             } else {
-                "Saved as Global System Prompt (other chats with custom prompts keep theirs)"
+                "Saved as $label (other chats with custom prompts keep theirs)"
             },
             lytso.code.ui.components.ChatToastType.SUCCESS
         )

@@ -24,9 +24,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import lytso.code.data.agent.opencode.OpenCodeBridgeClient
 import lytso.code.data.context.GlobalContext
 import lytso.code.theme.ClaudeTerracotta
+import lytso.code.ui.components.DEFAULT_OPENCODE_SYSTEM_PROMPT
+import lytso.code.ui.components.OpenCodeAccent
 import lytso.code.ui.components.bouncyVerticalScroll
+import kotlinx.coroutines.launch
 
 enum class PromptsHubTab(val label: String) {
     IDENTITY("Identity"),
@@ -38,9 +42,10 @@ enum class PromptsHubTab(val label: String) {
 @Composable
 fun PromptsAndContextEntryRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val globalPrompt by GlobalContext.globalSystemPrompt.collectAsState()
+    val openCodeGlobalPrompt by GlobalContext.openCodeGlobalSystemPrompt.collectAsState()
     val builtInOn by GlobalContext.builtInEnabled.collectAsState()
     val entries by GlobalContext.entries.collectAsState()
-    val hasIdentity = !globalPrompt.isNullOrBlank()
+    val hasIdentity = !globalPrompt.isNullOrBlank() || !openCodeGlobalPrompt.isNullOrBlank()
     val activeRules = entries.count { it.enabled }
 
     Surface(
@@ -87,7 +92,10 @@ fun PromptsAndContextEntryRow(onClick: () -> Unit, modifier: Modifier = Modifier
  * 3. Custom (Standing user rules · role: user · 1st or every message, full-screen editor)
  */
 @Composable
-fun PromptsAndContextScreen(initialTab: PromptsHubTab = PromptsHubTab.IDENTITY) {
+fun PromptsAndContextScreen(
+    initialTab: PromptsHubTab = PromptsHubTab.IDENTITY,
+    onSyncOpenCodeGlobalPrompt: ((String?) -> Unit)? = null
+) {
     var activeTab by remember(initialTab) { mutableStateOf(initialTab) }
     val entries by GlobalContext.entries.collectAsState()
     var editingRule by remember { mutableStateOf<GlobalContext.Entry?>(null) }
@@ -128,7 +136,7 @@ fun PromptsAndContextScreen(initialTab: PromptsHubTab = PromptsHubTab.IDENTITY) 
         Spacer(Modifier.height(12.dp))
 
         when (activeTab) {
-            PromptsHubTab.IDENTITY -> IdentityTabContent()
+            PromptsHubTab.IDENTITY -> IdentityTabContent(onSyncOpenCodeGlobalPrompt = onSyncOpenCodeGlobalPrompt)
             PromptsHubTab.BUILT_IN -> BuiltInTabContent()
             PromptsHubTab.CUSTOM -> CustomRulesTabContent(
                 entries = entries,
@@ -208,18 +216,81 @@ private fun LayerBadge(text: String, accent: Boolean = false) {
 }
 
 @Composable
-private fun IdentityTabContent() {
+private fun IdentityTabContent(
+    onSyncOpenCodeGlobalPrompt: ((String?) -> Unit)? = null
+) {
     val context = LocalContext.current
-    val savedGlobal by GlobalContext.globalSystemPrompt.collectAsState()
-    var draft by remember(savedGlobal) { mutableStateOf(savedGlobal.orEmpty()) }
+    val scope = rememberCoroutineScope()
+    // 0 = Antigravity, 1 = OpenCode
+    var selectedAgent by remember { mutableStateOf(0) }
+    val isOpenCode = selectedAgent == 1
+    val accentColor = if (isOpenCode) OpenCodeAccent else ClaudeTerracotta
+
+    val savedAgyGlobal by GlobalContext.globalSystemPrompt.collectAsState()
+    val savedOpenCodeGlobal by GlobalContext.openCodeGlobalSystemPrompt.collectAsState()
+    val savedGlobal = if (isOpenCode) savedOpenCodeGlobal else savedAgyGlobal
+
+    var draft by remember(selectedAgent, savedGlobal) { mutableStateOf(savedGlobal.orEmpty()) }
     val isActive = !savedGlobal.isNullOrBlank()
     val hasChanges = draft.trim() != (savedGlobal ?: "")
+
+    fun saveOpenCodeGlobal(cleaned: String?) {
+        GlobalContext.setOpenCodeGlobalSystemPrompt(cleaned)
+        if (onSyncOpenCodeGlobalPrompt != null) {
+            onSyncOpenCodeGlobalPrompt(cleaned)
+        } else {
+            scope.launch { runCatching { OpenCodeBridgeClient().setGlobalSystemPrompt(cleaned) } }
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .bouncyVerticalScroll(rememberScrollState())
     ) {
+        // Agent selector: Antigravity vs OpenCode (each keeps its own isolated Global System Prompt)
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                listOf(
+                    Triple(0, "Antigravity", !savedAgyGlobal.isNullOrBlank()),
+                    Triple(1, "OpenCode", !savedOpenCodeGlobal.isNullOrBlank())
+                ).forEach { (idx, label, customOn) ->
+                    val selected = selectedAgent == idx
+                    val pillColor = if (idx == 1) OpenCodeAccent else ClaudeTerracotta
+                    Surface(
+                        onClick = { selectedAgent = idx },
+                        shape = RoundedCornerShape(9.dp),
+                        color = if (selected) pillColor else Color.Transparent,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (customOn) "$label · Custom" else label,
+                                fontSize = 12.5.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
         // Compact priority hierarchy strip (visual, zero walls of text)
         Surface(
             shape = RoundedCornerShape(12.dp),
@@ -235,11 +306,11 @@ private fun IdentityTabContent() {
                 Icon(
                     Icons.Outlined.Psychology,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = accentColor,
                     modifier = Modifier.size(15.dp)
                 )
                 Text(
-                    text = "1. Chat  ›  2. Global  ›  3. Default",
+                    text = if (isOpenCode) "1. Chat  ›  2. OpenCode Global  ›  3. Default" else "1. Chat  ›  2. Global  ›  3. Default",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -257,12 +328,20 @@ private fun IdentityTabContent() {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(Modifier.weight(1f)) {
-                Text("Global System Prompt", fontSize = 15.5.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (isActive) "Replaces default <identity> for chats without override"
-                    else "Using agent built-in <identity>",
+                    if (isOpenCode) "OpenCode Global System Prompt" else "Antigravity Global System Prompt",
+                    fontSize = 15.5.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    when {
+                        isOpenCode && isActive -> "Replaces OpenCode's initial prompt (parts[0]) in real time · # Your Model hidden"
+                        isOpenCode -> "Using OpenCode default harness prompt · # Your Model hidden"
+                        isActive -> "Replaces default <identity> for Antigravity chats without override"
+                        else -> "Using Antigravity built-in <identity>"
+                    },
                     fontSize = 12.sp,
-                    color = if (isActive) ClaudeTerracotta else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isActive) accentColor else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             LayerBadge(if (isActive) "Active" else "Default", accent = isActive)
@@ -278,7 +357,11 @@ private fun IdentityTabContent() {
             maxLines = 22,
             placeholder = {
                 Text(
-                    "Define persona, tone and core rules for all chats…",
+                    if (isOpenCode) {
+                        "Define OpenCode's initial system prompt (parts[0]) for all OpenCode chats…\nCode Mode, skills & <env> stay active; # Your Model is removed."
+                    } else {
+                        "Define persona, tone and core rules for all Antigravity chats…"
+                    },
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
                 )
@@ -303,13 +386,21 @@ private fun IdentityTabContent() {
                 TextButton(
                     onClick = {
                         draft = ""
-                        GlobalContext.setGlobalSystemPrompt(null)
-                        Toast.makeText(context, "Reset to agent default", Toast.LENGTH_SHORT).show()
+                        if (isOpenCode) saveOpenCodeGlobal(null) else GlobalContext.setGlobalSystemPrompt(null)
+                        Toast.makeText(
+                            context,
+                            if (isOpenCode) "Reset to OpenCode default" else "Reset to agent default",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 ) {
                     Icon(Icons.Outlined.RestartAlt, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(4.dp))
                     Text("Reset", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                }
+            } else if (isOpenCode) {
+                TextButton(onClick = { draft = DEFAULT_OPENCODE_SYSTEM_PROMPT }) {
+                    Text("Load default", color = OpenCodeAccent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 }
             } else {
                 Spacer(Modifier.width(4.dp))
@@ -317,17 +408,22 @@ private fun IdentityTabContent() {
             Button(
                 onClick = {
                     val cleaned = draft.trim().takeIf { it.isNotBlank() }
-                    GlobalContext.setGlobalSystemPrompt(cleaned)
+                    if (isOpenCode) saveOpenCodeGlobal(cleaned) else GlobalContext.setGlobalSystemPrompt(cleaned)
                     Toast.makeText(
                         context,
-                        if (cleaned == null) "Global system prompt cleared" else "Global system prompt saved",
+                        when {
+                            isOpenCode && cleaned == null -> "OpenCode global system prompt cleared"
+                            isOpenCode -> "OpenCode global system prompt saved"
+                            cleaned == null -> "Global system prompt cleared"
+                            else -> "Global system prompt saved"
+                        },
                         Toast.LENGTH_SHORT
                     ).show()
                 },
                 enabled = hasChanges,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = if (isOpenCode) OpenCodeAccent else MaterialTheme.colorScheme.primary,
+                    contentColor = if (isOpenCode) Color.White else MaterialTheme.colorScheme.onPrimary
                 ),
                 shape = RoundedCornerShape(10.dp)
             ) {

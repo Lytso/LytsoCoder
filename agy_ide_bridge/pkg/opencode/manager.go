@@ -60,7 +60,8 @@ type Manager struct {
 	verModTime time.Time
 	version    string
 
-	provMu sync.Mutex
+	provMu      sync.Mutex
+	sysPromptMu sync.Mutex
 
 	jobMu sync.Mutex
 	job   *installJob
@@ -499,6 +500,8 @@ func (m *Manager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		m.handleCredentials(w, r)
 	case path == "/mcp" || strings.HasPrefix(path, "/mcp/"):
 		m.handleMcp(w, r, strings.Trim(strings.TrimPrefix(path, "/mcp"), "/"))
+	case path == "/system-prompt":
+		m.handleSystemPrompt(w, r)
 	case path == "/cli/job" || strings.HasPrefix(path, "/cli/"):
 		m.handleInstall(w, r, strings.TrimPrefix(path, "/cli/"))
 	case path == "/custom-providers/fetch-models" && r.Method == http.MethodPost:

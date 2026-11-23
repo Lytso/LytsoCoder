@@ -49,8 +49,12 @@ object GlobalContext {
     val builtInCustomText: StateFlow<String?> = _builtInCustomText.asStateFlow()
 
     private val _globalSystemPrompt = MutableStateFlow<String?>(null)
-    /** Default system prompt applied to every chat that does not define its own per-chat override. */
+    /** Default system prompt applied to every non-OpenCode chat (Antigravity, etc.) that has no per-chat override. */
     val globalSystemPrompt: StateFlow<String?> = _globalSystemPrompt.asStateFlow()
+
+    private val _openCodeGlobalSystemPrompt = MutableStateFlow<String?>(null)
+    /** Default system prompt applied to every OpenCode chat that has no per-chat override. */
+    val openCodeGlobalSystemPrompt: StateFlow<String?> = _openCodeGlobalSystemPrompt.asStateFlow()
 
     private val _entries = MutableStateFlow<List<Entry>>(emptyList())
     val entries: StateFlow<List<Entry>> = _entries.asStateFlow()
@@ -78,6 +82,7 @@ object GlobalContext {
         _builtInEnabled.value = p.getBoolean("builtin_enabled", true)
         _builtInCustomText.value = p.getString("builtin_custom_text", null)?.takeIf { it.isNotBlank() }
         _globalSystemPrompt.value = p.getString("global_system_prompt", null)?.trim()?.takeIf { it.isNotBlank() }
+        _openCodeGlobalSystemPrompt.value = p.getString("opencode_global_system_prompt", null)?.trim()?.takeIf { it.isNotBlank() }
         _entries.value = runCatching {
             val arr = JSONArray(p.getString("entries", "[]"))
             (0 until arr.length()).map { i ->
@@ -121,6 +126,7 @@ object GlobalContext {
         _builtInEnabled.value = true
         _builtInCustomText.value = null
         _globalSystemPrompt.value = null
+        _openCodeGlobalSystemPrompt.value = null
         _entries.value = emptyList()
         synchronized(sent) { sent.clear() }
         synchronized(chatPrompts) { chatPrompts.clear() }
@@ -153,11 +159,31 @@ object GlobalContext {
         }?.apply()
     }
 
-    /** Precedence: per-chat override -> [convOverride] -> [globalSystemPrompt] -> null (agent default). */
-    fun effectiveSystemPrompt(chatId: String?, convOverride: String? = null): String? {
+    fun setOpenCodeGlobalSystemPrompt(prompt: String?) {
+        val cleaned = prompt?.trim()?.takeIf { it.isNotBlank() }
+        _openCodeGlobalSystemPrompt.value = cleaned
+        sp?.edit()?.apply {
+            if (cleaned == null) remove("opencode_global_system_prompt") else putString("opencode_global_system_prompt", cleaned)
+        }?.apply()
+    }
+
+    fun globalSystemPromptFor(agent: lytso.code.domain.model.AgentKind?): StateFlow<String?> =
+        if (agent == lytso.code.domain.model.AgentKind.OPENCODE) openCodeGlobalSystemPrompt else globalSystemPrompt
+
+    /** Precedence: per-chat override -> [convOverride] -> agent's global system prompt -> null (agent default). */
+    fun effectiveSystemPrompt(
+        chatId: String?,
+        convOverride: String? = null,
+        agent: lytso.code.domain.model.AgentKind? = null
+    ): String? {
         chatSystemPrompt(chatId)?.takeIf { it.isNotBlank() }?.let { return it }
         convOverride?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
-        return _globalSystemPrompt.value?.takeIf { it.isNotBlank() }
+        val global = if (agent == lytso.code.domain.model.AgentKind.OPENCODE) {
+            _openCodeGlobalSystemPrompt.value
+        } else {
+            _globalSystemPrompt.value
+        }
+        return global?.takeIf { it.isNotBlank() }
     }
 
     fun chatSystemPrompt(chatId: String?): String? {

@@ -177,6 +177,49 @@ class GlobalContextTest {
     }
 
     @Test
+    fun antigravityAndOpenCodeGlobalPromptsAreIsolated() {
+        GlobalContext.setGlobalSystemPrompt("Antigravity Global Persona")
+        assertEquals(
+            "Antigravity Global Persona",
+            GlobalContext.effectiveSystemPrompt("agy-1", agent = lytso.code.domain.model.AgentKind.AGY)
+        )
+        // OpenCode must NOT inherit Antigravity's global prompt
+        assertNull(
+            GlobalContext.effectiveSystemPrompt("ses-1", agent = lytso.code.domain.model.AgentKind.OPENCODE)
+        )
+
+        GlobalContext.setOpenCodeGlobalSystemPrompt("OpenCode Global Harness")
+        assertEquals(
+            "OpenCode Global Harness",
+            GlobalContext.effectiveSystemPrompt("ses-1", agent = lytso.code.domain.model.AgentKind.OPENCODE)
+        )
+        assertEquals(
+            "Antigravity Global Persona",
+            GlobalContext.effectiveSystemPrompt("agy-1", agent = lytso.code.domain.model.AgentKind.AGY)
+        )
+
+        // Per-chat override still wins over OpenCode global
+        GlobalContext.setChatSystemPrompt("ses-1", "OpenCode Per-Chat Prompt")
+        assertEquals(
+            "OpenCode Per-Chat Prompt",
+            GlobalContext.effectiveSystemPrompt("ses-1", agent = lytso.code.domain.model.AgentKind.OPENCODE)
+        )
+        assertEquals(
+            "OpenCode Global Harness",
+            GlobalContext.effectiveSystemPrompt("ses-2", agent = lytso.code.domain.model.AgentKind.OPENCODE)
+        )
+
+        GlobalContext.setOpenCodeGlobalSystemPrompt(null)
+        assertNull(
+            GlobalContext.effectiveSystemPrompt("ses-2", agent = lytso.code.domain.model.AgentKind.OPENCODE)
+        )
+        assertEquals(
+            "Antigravity Global Persona",
+            GlobalContext.effectiveSystemPrompt("agy-1", agent = lytso.code.domain.model.AgentKind.AGY)
+        )
+    }
+
+    @Test
     fun builtInContextReflectsLiveRootAndCustomExplorerRoots() {
         GlobalContext.resetForTest(runsOnPhoneOverride = true, rootActiveOverride = false)
         val fpNoRoot = GlobalContext.fingerprint()
