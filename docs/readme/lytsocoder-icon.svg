@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 72 72" width="512" height="512" role="img" aria-label="LytsoCoder minimalist neon rainbow terminal logo">
+  <defs>
+    <!-- Exact squircle crop matching Android adaptive icon visible zone [18..90] -->
+    <clipPath id="squircleClip">
+      <rect x="18" y="18" width="72" height="72" rx="16"/>
+    </clipPath>
+
+    <!-- AMOLED center depth -->
+    <radialGradient id="bgDepth" cx="54" cy="54" r="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F111E"/>
+      <stop offset="100%" stop-color="#050508"/>
+    </radialGradient>
+
+    <!-- Subtle atmospheric neon auras behind >_ -->
+    <radialGradient id="auraMagenta" cx="40" cy="54" r="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF2A85" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#FF2A85" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="auraCyan" cx="66" cy="62" r="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00D9FF" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#00D9FF" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Continuous Neon Rainbow gradient across >_ -->
+    <linearGradient id="lcRainbow" x1="31" y1="44" x2="77" y2="66" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF2A85"/>
+      <stop offset="22%" stop-color="#FF7A00"/>
+      <stop offset="42%" stop-color="#FFE600"/>
+      <stop offset="62%" stop-color="#00F5A0"/>
+      <stop offset="82%" stop-color="#00D9FF"/>
+      <stop offset="100%" stop-color="#9B5CFF"/>
+    </linearGradient>
+
+    <!-- Smooth neon bloom filters -->
+    <filter id="neonWide" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3.4"/>
+    </filter>
+    <filter id="neonTight" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="1.4"/>
+    </filter>
+  </defs>
+
+  <g clip-path="url(#squircleClip)">
+    <!-- Pure AMOLED deep obsidian base + radial vignette -->
+    <rect x="18" y="18" width="72" height="72" fill="#050508"/>
+    <rect x="18" y="18" width="72" height="72" fill="url(#bgDepth)"/>
+    <rect x="18" y="18" width="72" height="72" fill="url(#auraMagenta)"/>
+    <rect x="18" y="18" width="72" height="72" fill="url(#auraCyan)"/>
+
+    <!-- Layer 1: Wide atmospheric neon glow -->
+    <g fill="none" stroke="url(#lcRainbow)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" opacity="0.28" filter="url(#neonWide)">
+      <path d="M33 41 L47.5 54 L33 67"/>
+      <path d="M54 67 L75 67"/>
+    </g>
+
+    <!-- Layer 2: Tight neon bloom -->
+    <g fill="none" stroke="url(#lcRainbow)" stroke-width="7.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.52" filter="url(#neonTight)">
+      <path d="M33 41 L47.5 54 L33 67"/>
+      <path d="M54 67 L75 67"/>
+    </g>
+
+    <!-- Layer 3: Crisp primary neon tube -->
+    <g fill="none" stroke="url(#lcRainbow)" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M33 41 L47.5 54 L33 67"/>
+      <path d="M54 67 L75 67"/>
+    </g>
+
+    <!-- Layer 4: Hot white glass specular filament -->
+    <g fill="none" stroke="#FFFFFF" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.72">
+      <path d="M33 41 L47.5 54 L33 67"/>
+      <path d="M54 67 L75 67"/>
+    </g>
+  </g>
+
+  <!-- Ultra-subtle hairline perimeter so dark GitHub themes separate cleanly without framing clutter -->
+  <rect x="18.4" y="18.4" width="71.2" height="71.2" rx="15.6" fill="none" stroke="url(#lcRainbow)" stroke-width="0.65" opacity="0.28"/>
+</svg>

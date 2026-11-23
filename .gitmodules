@@ -1,0 +1,21 @@
+[submodule "termux-am"]
+	path = termux-am
+	url = https://github.com/termux/TermuxAm.git
+[submodule "termux-api"]
+	path = termux-api
+	url = https://github.com/Lytso/lytsocoder-termux-api.git
+[submodule "termux-x11"]
+	path = termux-x11
+	url = https://github.com/Lytso/lytsocoder-termux-x11.git
+[submodule "lytsocoder-vscode"]
+	path = lytsocoder-vscode
+	url = https://github.com/Lytso/lytsocoder-vscode.git
+[submodule "lytsocoder-chrome-extension"]
+	path = lytsocoder-chrome-extension
+	url = https://github.com/Lytso/lytsocoder-chrome-extension.git
+[submodule "lytsocoder-mini-apps"]
+	path = lytsocoder-mini-apps
+	url = https://github.com/Lytso/lytsocoder-mini-apps.git
+[submodule "lytsocoder-plugins"]
+	path = lytsocoder-plugins
+	url = https://github.com/Lytso/lytsocoder-plugins.git

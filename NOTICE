@@ -1,0 +1,156 @@
+LytsoCoder — Legal Notices, Attribution & Open-Source Compliance
+==================================================================
+
+Project: LytsoCoder
+Maintainer: Lytso
+Repository: https://github.com/Lytso/LytsoCoder
+License: GNU General Public License v3.0 or later (see LICENSE)
+
+------------------------------------------------------------------
+1. UPSTREAM COPYRIGHT & LICENSE PROVENANCE (GNU GPLv3 Section 4)
+------------------------------------------------------------------
+
+LytsoCoder is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License (LICENSE) for more details.
+
+Upstream Origin:
+  Santoshkurmi/antigem (https://github.com/Santoshkurmi/antigem)
+  Copyright (C) 2026 Santosh Kurmi
+  Licensed under the GNU General Public License v3.0 or later.
+
+All existing copyright, license, and warranty notices from upstream
+contributors remain preserved across this distribution.
+
+------------------------------------------------------------------
+2. NOTICE OF MODIFICATIONS & DATES (GNU GPLv3 Section 5(a))
+------------------------------------------------------------------
+
+Copyright (C) 2026 Lytso
+Modifications and new original modules contributed by Lytso are
+likewise licensed under the GNU General Public License v3.0 or later.
+
+Summary of notable modifications in 2026:
+  - 2026-11-20: Rebranded application identity to LytsoCoder under
+    independent Android package IDs (`lytso.code` release,
+    `lytso.cdev` debug) and isolated loopback ports
+    (1240/1241/8770 release; 1242/1243/8771 debug) for conflict-free
+    side-by-side execution.
+  - 2026-11-20: Removed TelemetryDeck SDK and analytics/telemetry
+    reporting calls; updated release/updater workflows.
+  - 2026-11-20: Added independent, reproducible rootfs and offline
+    STEM render-bundle builders (`scripts/build_rootfs.py`,
+    `scripts/render_bundle/build_render_bundle.sh`, and
+    `.github/workflows/rootfs.yml`).
+  - 2026-11-20: Implemented Enhanced Conversation & Context Control:
+    editable Global Context and per-chat system prompts, non-destructive
+    in-place message editing (`agy_ide_bridge/pkg/brainctl` for SQLite
+    protobuf conversations and Claude JSONL transcripts), thinking-step
+    deletion, obsolete artifact deletion with context payload
+    redaction, direct context sync, and message-level fork/branching.
+  - 2026-11-20: Added Android 11+ seccomp-BPF process management
+    safety (`agy_ide_bridge/pkg/procutil` using direct `syscall.Kill`
+    instead of `pidfd_send_signal`), zero-disconnect hub pause/restart
+    handling, and automatic CSRF token rotation.
+  - 2026-11-20: Added this NOTICE document, updated README legal
+    disclosures, and created an original LytsoCoder vector emblem
+    (`docs/readme/lytsocoder-icon.svg`).
+  - 2026-11-20: Synchronized with upstream `Santoshkurmi/antigem@c9981af`
+    (`standalone`): added x86_64 target ABI build pipeline (`-Pabi=x86_64`,
+    NDK clang CGO bridge build, `glibc-min-x86_64.tar.xz`, seccomp syscall
+    rewrite shim, Linux x64 `agy` launcher), multi-account AGY switcher
+    and filesystem watcher (`/api/agy/accounts`), Elephant-Goldfish Method
+    (`EGM` `/egm`, `/egm-lite`, `/egm-review`), Gemmy floating mascot &
+    preferences, PinnedChats drawer grouping, HubManager stability fixes,
+    and Compose BOM `2026.11.01` update — while preserving all `lytso.code`
+    isolation, Enhanced Conversation & Context Control, Android 11+
+    seccomp-safe process control (`pkg/procutil`), and zero-telemetry guarantees.
+  - 2026-11-20: Replaced the launcher icon, in-app `AppIconImage`, Android 12+
+    splash animation, and README emblem with the minimalist Neon Rainbow
+    terminal (`>_`) artwork unified between `docs/readme/lytsocoder-icon.svg`
+    and Android adaptive drawables, and added the built-in `Rainbow AMOLED`
+    dark theme (`app/src/main/java/lytso/code/theme/RainbowAccent.kt`).
+
+------------------------------------------------------------------
+3. CORRESPONDING SOURCE AVAILABILITY (GNU GPLv3 Section 6)
+------------------------------------------------------------------
+
+Complete corresponding source code for LytsoCoder is available at:
+  https://github.com/Lytso/LytsoCoder
+
+Including:
+  - Android application source:        app/
+  - Local Go bridge server & tests:    agy_ide_bridge/
+  - Rootfs, backup & APK build tools:  scripts/
+  - Bundled browser plugins & docs:    extensions/, extension_docs/, mini_app_docs/
+  - Submodules:                        termux-am, termux-api, termux-x11,
+                                       antigem-vscode, antigem-chrome-extension,
+                                       antigem_mini_apps, antigem_plugins
+
+Source code for upstream Termux bootstrap and APT packages referenced
+by optional `rootfs-v2` builds is maintained by the Termux project at:
+  https://github.com/termux/termux-packages
+
+------------------------------------------------------------------
+4. THIRD-PARTY SOFTWARE & COMPONENT ATTRIBUTIONS
+------------------------------------------------------------------
+
+LytsoCoder incorporates or interacts with the following third-party
+open-source components (subject to their respective licenses):
+
+Android Application (`app/build.gradle.kts`):
+  - Termux terminal-emulator / view (com.github.termux.termux-app)
+  - TermuxAm (submodule: https://github.com/termux/TermuxAm)
+  - Sora Editor (io.github.Rosemoe.sora-editor: editor, language-textmate,
+    language-java)
+  - AndroidX & Jetpack Compose libraries (Core, Lifecycle, WorkManager,
+    WebKit, DataStore, Material3, Navigation3)
+  - OkHttp (com.squareup.okhttp3:okhttp, okhttp-sse)
+  - Wire gRPC & Protobuf runtime (com.squareup.wire)
+  - Kotlinx Serialization & Coroutines
+  - Coil (io.coil-kt:coil-compose, coil-svg)
+  - Markwon LaTeX & JLaTeXMath-Android
+  - JSch (com.github.mwiede:jsch)
+  - jsoup (org.jsoup:jsoup)
+  - Apache Commons Compress & XZ for Java (org.tukaani:xz)
+  - Guava ListenableFuture
+
+Go Bridge (`agy_ide_bridge/go.mod`):
+  - modernc.org/sqlite (and modernc.org/libc, mathutil, memory)
+  - github.com/gorilla/websocket
+  - github.com/google/uuid
+  - github.com/dustin/go-humanize
+  - github.com/ncruces/go-strftime
+  - github.com/remyoudompheng/bigfft
+  - golang.org/x/sys
+
+Optional Offline STEM Render Bundle (`scripts/render_bundle/build_render_bundle.sh`):
+  - Mermaid 10.9.8 (MIT License)
+  - SmilesDrawer 2.4.1
+  - function-plot 1.26.0
+  - JSXGraph 1.14.3 (MIT / LGPL)
+  - Matter.js 0.20.0
+  - TikZJax 1.0.0-beta24 (GPL-3.0+, @drgrice1/tikzjax)
+  - circuitikz 1.0, chemfig 1.4, simplekv 0.1 (LPPL)
+
+------------------------------------------------------------------
+5. TRADEMARKS & RIGHTS-HOLDER CONTACT
+------------------------------------------------------------------
+
+All third-party product names, logos, CLI names, and brands—including
+Google, Antigravity (`agy`), Android, Anthropic, Claude, Claude Code,
+OpenAI, Codex, ChatGPT, OpenCode, and Termux—are trademarks or
+registered trademarks of their respective owners. Their mention in this
+project constitutes nominative identification of software compatibility
+and does not imply affiliation, sponsorship, or endorsement.
+
+If you are a copyright or trademark owner and believe any file,
+attribution, or release artifact requires correction or removal, please
+open a detailed issue at:
+  https://github.com/Lytso/LytsoCoder/issues

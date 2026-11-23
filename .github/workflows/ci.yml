@@ -1,0 +1,69 @@
+name: CI Tests
+
+# Lytso — runs Go bridge tests and Android unit tests only (Release APKs are built exclusively by release.yml).
+on:
+  push:
+    branches:
+      - standalone
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'user_docs/**'
+      - 'LICENSE'
+      - 'NOTICE'
+  pull_request:
+    branches:
+      - standalone
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.console=plain
+
+jobs:
+  go-tests:
+    name: Go bridge tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'agy_ide_bridge/go.mod'
+      - name: Run Go bridge tests
+        run: |
+          cp version.json agy_ide_bridge/pkg/buildinfo/version.json
+          cd agy_ide_bridge && go test ./...
+
+  unit-tests:
+    name: Android unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch the termux-am submodule
+        run: git submodule update --init --depth 1 termux-am
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'agy_ide_bridge/go.mod'
+      - name: Tune Gradle for CI
+        run: |
+          mkdir -p ~/.gradle
+          cat >> ~/.gradle/gradle.properties <<'PROPS'
+          org.gradle.jvmargs=-Xmx6g -XX:+UseParallelGC -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
+          kotlin.daemon.jvmargs=-Xmx4g -XX:+UseParallelGC
+          PROPS
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          add-job-summary: never
+      - name: Run Android unit tests
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest

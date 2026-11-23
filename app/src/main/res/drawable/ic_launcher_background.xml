@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- LytsoCoder minimalist AMOLED obsidian background with subtle rainbow atmospheric glow behind >_. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- AMOLED obsidian base -->
+    <path android:fillColor="#FF050508" android:pathData="M0,0H108V108H0Z" />
+
+    <!-- Subtle radial center depth -->
+    <path android:pathData="M0,0H108V108H0Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="52"
+                android:startColor="#FF0F111E"
+                android:endColor="#FF050508" />
+        </aapt:attr>
+    </path>
+
+    <!-- Subtle left magenta aura behind '>' -->
+    <path android:pathData="M0,0H108V108H0Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="40"
+                android:centerY="54"
+                android:gradientRadius="28"
+                android:startColor="#24FF2A85"
+                android:endColor="#00FF2A85" />
+        </aapt:attr>
+    </path>
+
+    <!-- Subtle right cyan aura behind '_' -->
+    <path android:pathData="M0,0H108V108H0Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="66"
+                android:centerY="62"
+                android:gradientRadius="28"
+                android:startColor="#2400D9FF"
+                android:endColor="#0000D9FF" />
+        </aapt:attr>
+    </path>
+</vector>

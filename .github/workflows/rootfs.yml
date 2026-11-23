@@ -1,0 +1,92 @@
+name: Build & Publish Rootfs and Render Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_rootfs:
+        description: 'Build and publish rootfs-v2 (lytsocoder-rootfs-aarch64.zip)'
+        type: boolean
+        required: false
+        default: true
+      build_render_bundle:
+        description: 'Build and publish render-v1 (lytsocoder-render-bundle-v1.zip)'
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  publish-assets:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Rootfs Archive
+        if: ${{ inputs.build_rootfs != false }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p output
+          python3 scripts/build_rootfs.py \
+            --package lytso.code \
+            --output output/lytsocoder-rootfs-aarch64.zip \
+            --meta-out output/rootfs-meta.json
+          (cd output && sha256sum lytsocoder-rootfs-aarch64.zip > SHA256SUMS.txt)
+          cat output/rootfs-meta.json
+
+      - name: Publish rootfs-v2 Release
+        if: ${{ inputs.build_rootfs != false }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY' > output/rootfs-notes.md
+          import json
+          meta = json.load(open("output/rootfs-meta.json"))
+          mb = meta["size_bytes"] / (1024 * 1024)
+          print(f"""LytsoCoder standalone Linux rootfs (`{meta['arch']}`), built natively for `Lytso` from official Termux bootstrap (`{meta['bootstrap_tag']}`), Termux APT packages ({meta['package_count']} packages), and Google Antigravity CLI `agy` v{meta['agy_version']}.
+
+          - Target package ID: `{meta['package']}` (10 bytes; also relocated automatically by `TermuxRelocation` for `lytso.cdev`)
+          - Asset: `{meta['asset_name']}` ({meta['size_bytes']} bytes / {mb:.1f} MiB)
+          - SHA-256: `{meta['sha256']}`""")
+          PY
+          if gh release view rootfs-v2 >/dev/null 2>&1; then
+            gh release upload rootfs-v2 output/lytsocoder-rootfs-aarch64.zip output/SHA256SUMS.txt --clobber
+            gh release edit rootfs-v2 --title "LytsoCoder Rootfs v2" --notes-file output/rootfs-notes.md
+          else
+            gh release create rootfs-v2 output/lytsocoder-rootfs-aarch64.zip output/SHA256SUMS.txt \
+              --target "${{ github.sha }}" \
+              --title "LytsoCoder Rootfs v2" \
+              --notes-file output/rootfs-notes.md
+          fi
+
+      - name: Build Render Bundle
+        if: ${{ inputs.build_render_bundle != false }}
+        run: |
+          chmod +x scripts/render_bundle/build_render_bundle.sh
+          bash scripts/render_bundle/build_render_bundle.sh
+
+      - name: Publish render-v1 Release
+        if: ${{ inputs.build_render_bundle != false }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ZIP_PATH="scripts/render_bundle/out/lytsocoder-render-bundle-v1.zip"
+          SHA_PATH="scripts/render_bundle/out/lytsocoder-render-bundle-v1.zip.sha256"
+          SIZE_BYTES=$(wc -c < "$ZIP_PATH" | tr -d ' ')
+          SHA_HEX=$(awk '{print $1}' "$SHA_PATH")
+          NOTES="LytsoCoder offline STEM & diagrams bundle (Mermaid 10.9.8, SmilesDrawer 2.4.1, function-plot 1.26.0, JSXGraph 1.14.3, Matter.js 0.20.0, TikZJax 1.0.0-beta24 + circuitikz/chemfig).\n\n- Asset: \`lytsocoder-render-bundle-v1.zip\` (${SIZE_BYTES} bytes)\n- SHA-256: \`${SHA_HEX}\`"
+          if gh release view render-v1 >/dev/null 2>&1; then
+            gh release upload render-v1 "$ZIP_PATH" "$SHA_PATH" --clobber
+            gh release edit render-v1 --title "LytsoCoder Render Bundle v1" --notes "$(printf '%b' "$NOTES")"
+          else
+            gh release create render-v1 "$ZIP_PATH" "$SHA_PATH" \
+              --target "${{ github.sha }}" \
+              --title "LytsoCoder Render Bundle v1" \
+              --notes "$(printf '%b' "$NOTES")"
+          fi
+          echo "RENDER_SIZE_BYTES=${SIZE_BYTES}"
+          echo "RENDER_SHA256=${SHA_HEX}"
