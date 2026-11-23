@@ -379,9 +379,13 @@ object GlobalContext {
     }
 
     /** What every message of a normal chat carries (including per-chat or global custom system prompt when [includeChatSystemPrompt] is true), or null. */
-    fun everyMessageBody(chatId: String? = null, includeChatSystemPrompt: Boolean = true): String? {
+    fun everyMessageBody(
+        chatId: String? = null,
+        includeChatSystemPrompt: Boolean = true,
+        agent: lytso.code.domain.model.AgentKind? = null
+    ): String? {
         val blocks = mutableListOf<String>()
-        val chatPrompt = if (includeChatSystemPrompt) effectiveSystemPrompt(chatId) else null
+        val chatPrompt = if (includeChatSystemPrompt) effectiveSystemPrompt(chatId, agent = agent) else null
         if (!chatPrompt.isNullOrBlank()) {
             blocks += "[Chat system prompt, set by the user for this chat. It REPLACES your default persona, style and system instructions wherever they differ (keep only your tool and safety rules). Follow it strictly in every reply.]\n$chatPrompt"
         }
@@ -404,13 +408,14 @@ object GlobalContext {
         chatId: String?,
         hasEarlierMessages: Boolean,
         text: String,
-        includeChatSystemPrompt: Boolean = true
+        includeChatSystemPrompt: Boolean = true,
+        agent: lytso.code.domain.model.AgentKind? = null
     ): Pair<String, String?> {
         val first = firstMessageBody()
         val fp = fingerprint()
         val known = chatId?.takeIf { it.isNotBlank() }?.let { id -> synchronized(sent) { sent[id] } }
         val sendFirst = first != null && (!hasEarlierMessages || known != fp)
-        val every = everyMessageBody(chatId, includeChatSystemPrompt)
+        val every = everyMessageBody(chatId, includeChatSystemPrompt, agent)
         if (!sendFirst && every == null) return text to null
         val note = buildString {
             if (sendFirst) {

@@ -335,8 +335,8 @@ private fun IdentityTabContent(
                 )
                 Text(
                     when {
-                        isOpenCode && isActive -> "Replaces OpenCode's initial prompt (parts[0]) in real time · # Your Model hidden"
-                        isOpenCode -> "Using OpenCode default harness prompt · # Your Model hidden"
+                        isOpenCode && isActive -> "Replaces the entire OpenCode systemInstruction · # Your Model removed"
+                        isOpenCode -> "Using OpenCode default prompt · # Your Model removed"
                         isActive -> "Replaces default <identity> for Antigravity chats without override"
                         else -> "Using Antigravity built-in <identity>"
                     },
@@ -358,7 +358,7 @@ private fun IdentityTabContent(
             placeholder = {
                 Text(
                     if (isOpenCode) {
-                        "Define OpenCode's initial system prompt (parts[0]) for all OpenCode chats…\nCode Mode, skills & <env> stay active; # Your Model is removed."
+                        "Define the exact systemInstruction for all OpenCode chats…\nReplaces OpenCode's default prompt completely (zero extra boilerplate, zero # Your Model)."
                     } else {
                         "Define persona, tone and core rules for all Antigravity chats…"
                     },

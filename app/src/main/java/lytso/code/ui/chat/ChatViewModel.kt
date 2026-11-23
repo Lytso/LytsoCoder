@@ -588,7 +588,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             chatId = chatId,
             hasEarlierMessages = hasEarlier,
             text = text,
-            includeChatSystemPrompt = !usesNativeSystemPrompt
+            includeChatSystemPrompt = !usesNativeSystemPrompt,
+            agent = conv?.agent
         )
         if (fingerprint != null && chatId.isNullOrBlank()) {
             viewModelScope.launch {

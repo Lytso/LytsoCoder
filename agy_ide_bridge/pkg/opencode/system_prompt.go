@@ -40,10 +40,13 @@ const DefaultBaseSystemPrompt = `You are an AI agent running in OpenCode, a codi
 const defaultWorktreePromptPart = "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session.move` and make the worktree the session's working directory."
 
 // systemPromptPluginSource is a zero-dependency OpenCode V2 server plugin that:
-//  1. Strips OpenCode's "# Your Model" system part (belt-and-suspenders alongside "-opencode.prompt.identity").
+//  1. Strips OpenCode's "# Your Model" system part everywhere (alongside "-opencode.prompt.identity").
 //  2. Captures the live default OpenCode system parts to prompt_snapshot.json for accurate UI inspection.
-//  3. Replaces system[0] (the initial harness prompt) in real time from system_prompts.json (per-chat > global > default)
-//     without needing to restart opencode serve.
+//  3. When a custom per-chat or global OpenCode prompt is active in system_prompts.json, REPLACES the entire
+//     event.system array with ONLY [{ type: "text", text: effective }] so systemInstruction contains solely
+//     the user's prompt (no giant OpenCode boilerplate or extra parts).
+//  4. Sanitizes event.messages so system prompts, "# Your Model", or OpenCode system-instruction updates
+//     are never duplicated into user input (contents).
 const systemPromptPluginSource = `import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,9 +56,13 @@ const DATA_DIR = path.resolve(PLUGIN_DIR, "..", "..");
 const PROMPTS_FILE = path.join(DATA_DIR, "system_prompts.json");
 const SNAPSHOT_FILE = path.join(DATA_DIR, "prompt_snapshot.json");
 
+const MODEL_IDENTITY_RE = /^\s*#\s*Your Model\b/m;
+const MODEL_IDENTITY_BLOCK_RE = /(?:^|\n)#\s*Your Model\r?\n(?:\s*-\s*(?:Name|Provider ID|Model ID):[^\n]*\r?\n?)+/g;
+const CHAT_SYS_HEADER = "[Chat system prompt, set by the user for this chat.";
+
 function isModelIdentityPart(part) {
   if (!part || typeof part.text !== "string") return false;
-  return /^\s*#\s*Your Model\b/m.test(part.text);
+  return MODEL_IDENTITY_RE.test(part.text);
 }
 
 function stripModelIdentity(system) {
@@ -63,6 +70,83 @@ function stripModelIdentity(system) {
   for (let i = system.length - 1; i >= 0; i--) {
     if (isModelIdentityPart(system[i])) {
       system.splice(i, 1);
+    }
+  }
+}
+
+function stripLegacyChatPromptBlock(text) {
+  if (typeof text !== "string" || !text) return text;
+  let out = text.replace(MODEL_IDENTITY_BLOCK_RE, "\n");
+
+  // Clean [Chat system prompt...] blocks inside <lytsocoder-expansion ...>...</lytsocoder-expansion>
+  out = out.replace(
+    /<lytsocoder-expansion\b[^>]*>([\s\S]*?)<\/lytsocoder-expansion>/g,
+    (full, inner) => {
+      if (!inner.includes(CHAT_SYS_HEADER)) return full;
+      const start = inner.indexOf(CHAT_SYS_HEADER);
+      const nextStanding = inner.indexOf("[The user's standing instructions", start);
+      const before = inner.slice(0, start).trimEnd();
+      const after = nextStanding >= 0 ? inner.slice(nextStanding).trimStart() : "";
+      const merged = [before, after].filter(Boolean).join("\n\n").trim();
+      if (!merged) return "";
+      const openTagEnd = full.indexOf(">") + 1;
+      return full.slice(0, openTagEnd) + merged + "</lytsocoder-expansion>";
+    }
+  );
+
+  // Clean any standalone legacy [Chat system prompt...] block if not wrapped in expansion tags
+  if (out.includes(CHAT_SYS_HEADER)) {
+    const start = out.indexOf(CHAT_SYS_HEADER);
+    const nextBlock = out.indexOf("\n\n[The user's standing instructions", start);
+    if (nextBlock >= 0) {
+      out = (out.slice(0, start) + out.slice(nextBlock + 2)).trimStart();
+    }
+  }
+
+  return out;
+}
+
+function isOpenCodeInstructionDump(text) {
+  if (typeof text !== "string") return false;
+  if (MODEL_IDENTITY_RE.test(text)) return true;
+  if (text.includes("# Code Mode") && text.includes("tools.")) return true;
+  if (text.includes("<available_skills>") && text.includes("</available_skills>")) return true;
+  if (text.includes("The environment you are running in is now:") && text.includes("<env>")) return true;
+  if (text.includes("Today's date is now:")) return true;
+  return false;
+}
+
+function sanitizeMessages(messages, hasCustomPrompt) {
+  if (!Array.isArray(messages)) return;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg) continue;
+
+    // Gemini lowers role:"system" messages from event.messages directly into contents[] as role:"user".
+    // Always remove "# Your Model" system messages, and when custom prompt is active, drop OpenCode
+    // instruction dumps so system instructions are never replicated into user contents.
+    if (msg.role === "system") {
+      const texts = Array.isArray(msg.content)
+        ? msg.content.map((p) => (p && typeof p.text === "string" ? p.text : "")).join("\n")
+        : typeof msg.content === "string"
+        ? msg.content
+        : "";
+      if (MODEL_IDENTITY_RE.test(texts) || (hasCustomPrompt && isOpenCodeInstructionDump(texts))) {
+        messages.splice(i, 1);
+      }
+      continue;
+    }
+
+    if (msg.role === "user" && Array.isArray(msg.content)) {
+      for (let j = 0; j < msg.content.length; j++) {
+        const part = msg.content[j];
+        if (part && part.type === "text" && typeof part.text === "string") {
+          const cleaned = stripLegacyChatPromptBlock(part.text);
+          if (cleaned !== part.text) {
+            msg.content[j] = { ...part, text: cleaned };
+          }
+        }
+      }
     }
   }
 }
@@ -137,17 +221,19 @@ export default {
           ? prompts.chats[event.sessionID].trim()
           : "";
       const effective = chatOverride || prompts.global;
+
       if (effective) {
-        if (event.system.length > 0) {
-          event.system[0] = { ...event.system[0], text: effective };
-        } else {
-          event.system.push({ type: "text", text: effective });
-        }
+        // Replace the entire systemInstruction with ONLY the user's prompt — no extra OpenCode boilerplate.
+        event.system.splice(0, event.system.length, { type: "text", text: effective });
       }
+
+      sanitizeMessages(event.messages, Boolean(effective));
     });
 
     const stripOnly = (event) => {
-      if (event && Array.isArray(event.system)) stripModelIdentity(event.system);
+      if (!event) return;
+      if (Array.isArray(event.system)) stripModelIdentity(event.system);
+      if (Array.isArray(event.messages)) sanitizeMessages(event.messages, false);
     };
     await ctx.session.hook("compaction", stripOnly);
     await ctx.session.hook("generate", stripOnly);
@@ -308,7 +394,6 @@ func (m *Manager) compileOpenCodePrompt(ctx context.Context, sessionID, workspac
 		}
 	}
 
-	// If OpenCode is running and a non-default agent has its own configured system prompt, inspect it.
 	if m.Running() && agentID != "" && agentID != "build" {
 		var agentResp struct {
 			Data struct {
@@ -360,16 +445,6 @@ func (m *Manager) handleSystemPrompt(w http.ResponseWriter, r *http.Request) {
 		}
 		globalPrompt := strings.TrimSpace(st.Global)
 
-		effectiveBase := defaultBase
-		source := "default"
-		if chatPrompt != "" {
-			effectiveBase = chatPrompt
-			source = "chat"
-		} else if globalPrompt != "" {
-			effectiveBase = globalPrompt
-			source = "global"
-		}
-
 		joinParts := func(base string, extras []string) string {
 			parts := make([]string, 0, 1+len(extras))
 			if strings.TrimSpace(base) != "" {
@@ -383,13 +458,27 @@ func (m *Manager) handleSystemPrompt(w http.ResponseWriter, r *http.Request) {
 			return strings.Join(parts, "\n\n---\n\n")
 		}
 
+		defaultFull := joinParts(defaultBase, extraParts)
+		effectiveBase := defaultBase
+		activeFull := defaultFull
+		source := "default"
+		if chatPrompt != "" {
+			effectiveBase = chatPrompt
+			activeFull = chatPrompt
+			source = "chat"
+		} else if globalPrompt != "" {
+			effectiveBase = globalPrompt
+			activeFull = globalPrompt
+			source = "global"
+		}
+
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"success":              true,
 			"agent":                "opencode",
 			"sessionId":            sessionID,
 			"defaultBasePrompt":    defaultBase,
-			"defaultFullPrompt":    joinParts(defaultBase, extraParts),
-			"activeFullPrompt":     joinParts(effectiveBase, extraParts),
+			"defaultFullPrompt":    defaultFull,
+			"activeFullPrompt":     activeFull,
 			"globalPrompt":         globalPrompt,
 			"chatPrompt":           chatPrompt,
 			"effectiveBasePrompt":  effectiveBase,
@@ -405,7 +494,6 @@ func (m *Manager) handleSystemPrompt(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Make sure the live plugin is on disk if opencode hasn't been configured yet.
 		pluginMissing := false
 		if _, err := os.Stat(filepath.Join(m.systemPromptPluginDir(), "index.js")); err != nil {
 			pluginMissing = true

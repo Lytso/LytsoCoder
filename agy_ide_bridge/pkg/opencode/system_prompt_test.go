@@ -64,14 +64,14 @@ func TestOpenCodeSystemPromptPrecedenceAndEndpoints(t *testing.T) {
 		t.Fatalf("defaultFullPrompt must not contain Antigravity or # Your Model: %q", defaultFull)
 	}
 
-	// 2. Global OpenCode prompt applies to sessions without per-chat override
+	// 2. Global OpenCode prompt replaces entire activeFullPrompt (no OpenCode boilerplate left)
 	res = doJSON(t, m, http.MethodPut, "/api/opencode/system-prompt", `{"scope":"global","prompt":"You are OpenCode Global Persona."}`)
 	if res["success"] != true {
 		t.Fatalf("set global failed: %v", res)
 	}
 	res = doJSON(t, m, http.MethodGet, "/api/opencode/system-prompt?sessionId=ses_1", "")
-	if res["source"] != "global" || res["effectiveBasePrompt"] != "You are OpenCode Global Persona." {
-		t.Fatalf("expected global precedence: %v", res)
+	if res["source"] != "global" || res["effectiveBasePrompt"] != "You are OpenCode Global Persona." || res["activeFullPrompt"] != "You are OpenCode Global Persona." {
+		t.Fatalf("expected global precedence with exclusive systemInstruction: %v", res)
 	}
 
 	// 3. Per-chat override takes priority over global, isolated to that session
@@ -80,8 +80,8 @@ func TestOpenCodeSystemPromptPrecedenceAndEndpoints(t *testing.T) {
 		t.Fatalf("set chat failed: %v", res)
 	}
 	res = doJSON(t, m, http.MethodGet, "/api/opencode/system-prompt?sessionId=ses_1", "")
-	if res["source"] != "chat" || res["effectiveBasePrompt"] != "Only for ses_1." {
-		t.Fatalf("expected chat precedence: %v", res)
+	if res["source"] != "chat" || res["effectiveBasePrompt"] != "Only for ses_1." || res["activeFullPrompt"] != "Only for ses_1." {
+		t.Fatalf("expected chat precedence with exclusive systemInstruction: %v", res)
 	}
 	resOther := doJSON(t, m, http.MethodGet, "/api/opencode/system-prompt?sessionId=ses_2", "")
 	if resOther["source"] != "global" || resOther["effectiveBasePrompt"] != "You are OpenCode Global Persona." {

@@ -153,8 +153,8 @@ fun GlobalSystemPromptScreen(onOpenGlobalContext: (() -> Unit)? = null) {
                         )
                         Text(
                             when {
-                                isOpenCode && isActive -> "Active · replaces OpenCode initial prompt (parts[0]) · # Your Model hidden"
-                                isOpenCode -> "Off · OpenCode uses its default harness prompt · # Your Model hidden"
+                                isOpenCode && isActive -> "Active · replaces the entire OpenCode systemInstruction · # Your Model removed"
+                                isOpenCode -> "Off · OpenCode uses its default prompt · # Your Model removed"
                                 isActive -> "Active · replaces default <identity> & persona"
                                 else -> "Off · chats use the agent's built-in default"
                             },
