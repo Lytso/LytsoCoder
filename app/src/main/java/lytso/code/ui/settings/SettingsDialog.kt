@@ -175,7 +175,7 @@ enum class SettingsSection(val title: String, val subtitle: String) {
         X11_DESKTOP -> if (chrootRunsPhone()) MAIN else TERMUX_SUPPORT
         REA_GROUPS -> REA
         UBUNTU_CHROOT -> SERVERS
-        GLOBAL_CONTEXT, AGENT_MEMORY, EGM -> AGENTS
+        GLOBAL_CONTEXT, AGENT_MEMORY -> AGENTS
         AGENT_HISTORY -> AGENT_MEMORY
         CHANGELOG -> ABOUT
         else -> if (jarvisPage != null) JARVIS else MAIN
@@ -4431,31 +4431,6 @@ private fun TerminalSubScreen(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
                     TextButton(onClick = onOpenRuntime) { Text("Where agents run", color = ClaudeTerracotta) }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        if (isLocalToolsInstalled) {
-                            OutlinedButton(
-                                onClick = { showResetWarningDialog = true },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
-                                border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.4f))
-                            ) {
-                                Icon(imageVector = Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color.Red)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Delete All & Factory Reset", fontSize = 12.5.sp, color = Color.Red, fontWeight = FontWeight.SemiBold)
-                            }
-                        } else {
-                            Button(
-                                onClick = onInstallLocalTools,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
-                            ) {
-                                Text("Download & Install Local Tools", fontSize = 12.5.sp)
-                            }
-                        }
-                    }
                 }
             }
         }
