@@ -756,7 +756,9 @@ class TrajectoryEngine {
                                 }
                             }
                             is TurnBlock.Tool -> {
-                                if (toolCalls.none { it.stepIndex == block.stepIndex }) {
+                                if (!lytso.code.data.security.HiddenToolStepsStore.isHidden(convId, block.stepIndex, block.toolCall.id) &&
+                                    toolCalls.none { it.stepIndex == block.stepIndex }
+                                ) {
                                     toolCalls.add(block.toolCall)
                                     contentParts.add("<!-- tool_call:${block.toolCall.id} -->")
                                 }
@@ -791,7 +793,9 @@ class TrajectoryEngine {
                             is TurnBlock.SystemNotice -> {
                                 if (block.content.isNotBlank()) {
                                     val noticeToolId = "notice_${block.stepIndex}"
-                                    if (toolCalls.none { it.id == noticeToolId || it.stepIndex == block.stepIndex }) {
+                                    if (!lytso.code.data.security.HiddenToolStepsStore.isHidden(convId, block.stepIndex, noticeToolId) &&
+                                        toolCalls.none { it.id == noticeToolId || it.stepIndex == block.stepIndex }
+                                    ) {
                                         val noticeTool = ToolCall(
                                             id = noticeToolId,
                                             name = "system_notice",
@@ -939,8 +943,14 @@ class TrajectoryEngine {
             return
         }
 
-        // Skip internal non-tool bookkeeping steps that previously leaked into the UI as "Ran bash unknown_tool"
-        if (step.requested_interaction == null && step.metadata?.tool_call?.name.isNullOrBlank()) {
+        // Skip completed internal bookkeeping steps without tool metadata; keep actively running steps visible
+        // so the user always sees what is executing and can stop or delete them with the trash icon.
+        val isStepActivelyRunning = step.status == CortexStepStatus.CORTEX_STEP_STATUS_RUNNING ||
+            step.status == CortexStepStatus.CORTEX_STEP_STATUS_PENDING ||
+            step.status == CortexStepStatus.CORTEX_STEP_STATUS_GENERATING ||
+            step.status == CortexStepStatus.CORTEX_STEP_STATUS_QUEUED ||
+            step.status == CortexStepStatus.CORTEX_STEP_STATUS_WAITING
+        if (!isStepActivelyRunning && step.requested_interaction == null && step.metadata?.tool_call?.name.isNullOrBlank()) {
             when (step.type) {
                 CortexStepType.CORTEX_STEP_TYPE_UNSPECIFIED,
                 CortexStepType.CORTEX_STEP_TYPE_DUMMY,
@@ -1028,9 +1038,16 @@ class TrajectoryEngine {
 
         val toolId = stepIndex.toString()
         val fullOutputUri = step.generic?.result?.full_output_uri
+        val isActivelyExecuting = step.status == CortexStepStatus.CORTEX_STEP_STATUS_RUNNING ||
+            step.status == CortexStepStatus.CORTEX_STEP_STATUS_PENDING ||
+            step.status == CortexStepStatus.CORTEX_STEP_STATUS_GENERATING ||
+            step.status == CortexStepStatus.CORTEX_STEP_STATUS_QUEUED ||
+            step.status == CortexStepStatus.CORTEX_STEP_STATUS_WAITING
 
-        // Drop ghost unknown_tool steps that carry no real tool metadata, args, interaction or output
-        if (toolType == ToolType.UNKNOWN &&
+        // Only drop already-finished ghost unknown_tool steps with zero metadata/args/output;
+        // keep actively running unknown tools visible so the user can see, stop, or delete them.
+        if (!isActivelyExecuting &&
+            toolType == ToolType.UNKNOWN &&
             rawName == "unknown_tool" &&
             tcMeta?.name.isNullOrBlank() &&
             argsMap.isEmpty() &&

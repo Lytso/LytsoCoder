@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -30,10 +31,12 @@ import kotlinx.coroutines.launch
 import lytso.code.data.adb.AdbConnectManager
 import lytso.code.data.adb.DeviceAccess
 import lytso.code.data.adb.RootShell
+import lytso.code.data.adb.ShizukuShell
 import lytso.code.data.files.FileExplorerApi
 import lytso.code.data.security.AiPermissionPolicy
 import lytso.code.data.security.AiPermissionsClient
 import lytso.code.theme.AppColors
+import lytso.code.theme.QuotaGreen
 import lytso.code.ui.components.bouncyVerticalScroll
 
 private val WORKSPACE_FOLDERS = listOf(
@@ -75,6 +78,8 @@ fun AiPermissionsAndExplorerScreen(
     val snapshot by AiPermissionsClient.state.collectAsState()
     val deviceMode by DeviceAccess.mode.collectAsState()
     val rootShellState by RootShell.state.collectAsState()
+    val adbState by AdbConnectManager.state.collectAsState()
+    val shizukuStatus by ShizukuShell.status.collectAsState()
 
     var selectedTab by remember(initialTab) { mutableStateOf(initialTab.coerceIn(0, 2)) }
     var busy by remember { mutableStateOf(false) }
@@ -105,6 +110,7 @@ fun AiPermissionsAndExplorerScreen(
         AdbConnectManager.init(context)
         DeviceAccess.init(context)
         AiPermissionsClient.refresh()
+        ShizukuShell.refresh()
         customRoots = FileExplorerApi.customRoots()
     }
 
@@ -131,8 +137,8 @@ fun AiPermissionsAndExplorerScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Unified top tab selector: Access & Root | AI & Tools | Explorer
-        val tabs = listOf("Access & Root", "AI & Tools", "Explorer")
+        // Top navigation tabs: Device Access | AI & Tools | Explorer
+        val tabs = listOf("Device Access", "AI & Tools", "Explorer")
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             tabs.forEachIndexed { idx, label ->
                 SegmentedButton(
@@ -147,101 +153,116 @@ fun AiPermissionsAndExplorerScreen(
 
         when (selectedTab) {
             0 -> {
-                // 1. Unified Root Guard (0ms hot-reload ai_bin_guard + RootShell sync)
-                SectionLabel("AI ROOT ACCESS (TERMUX & SU GUARD)")
+                // Hero Mode Selector Card — clean, didactic, live status pill
+                val (modeBadgeText, modeBadgeColor) = when (deviceMode) {
+                    DeviceAccess.Mode.ADB ->
+                        if (adbState.connectedDevice != null) "Connected" to QuotaGreen
+                        else "Setup needed" to AppColors.warning
+                    DeviceAccess.Mode.SHIZUKU ->
+                        if (shizukuStatus.ready) "Ready" to QuotaGreen
+                        else "Setup needed" to AppColors.warning
+                    DeviceAccess.Mode.ROOT -> when {
+                        effectiveRootGranted && snapshot.policy.allowRoot -> "Active" to QuotaGreen
+                        effectiveRootGranted -> "Guarded" to AppColors.warning
+                        rootShellState.check == RootShell.Check.CHECKING -> "Checking…" to MaterialTheme.colorScheme.primary
+                        else -> "Not granted" to AppColors.danger
+                    }
+                }
+                val modeIcon = when (deviceMode) {
+                    DeviceAccess.Mode.ADB -> Icons.Outlined.PhonelinkSetup
+                    DeviceAccess.Mode.SHIZUKU -> Icons.Outlined.Bolt
+                    DeviceAccess.Mode.ROOT -> Icons.Outlined.AdminPanelSettings
+                }
+                val suCmd = if (AdbConnectManager.inChroot) "android-su -c" else "su -c"
+
                 Surface(shape = RoundedCornerShape(16.dp), color = cardBg, border = cardBorder, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                             Box(
                                 Modifier
-                                    .size(36.dp)
+                                    .size(34.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background((if (snapshot.policy.allowRoot) AppColors.danger else MaterialTheme.colorScheme.primary).copy(alpha = 0.14f)),
+                                    .background(modeBadgeColor.copy(alpha = 0.14f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    Icons.Outlined.AdminPanelSettings,
-                                    null,
-                                    tint = if (snapshot.policy.allowRoot) AppColors.danger else MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                Icon(modeIcon, null, tint = modeBadgeColor, modifier = Modifier.size(19.dp))
                             }
-                            Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
-                                Text("Allow Root (su) for AI", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                                val statusText = when {
-                                    !snapshot.loaded && rootShellState.check == RootShell.Check.UNKNOWN -> "Checking device root…"
-                                    effectiveRootGranted -> "Device root verified (${effectiveSuPath.ifBlank { "su" }})"
-                                    snapshot.rootBinaryFound || rootShellState.check == RootShell.Check.DENIED -> "su found, but root permission denied to app"
-                                    else -> "Device is not rooted"
-                                }
-                                Text(statusText, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Switch(
-                                checked = snapshot.policy.allowRoot && effectiveRootGranted,
-                                enabled = !busy && effectiveRootGranted,
-                                onCheckedChange = { enable ->
-                                    applyPolicy(
-                                        snapshot.policy.copy(allowRoot = enable),
-                                        if (enable) "AI root access enabled (active immediately)" else "AI root access blocked (su guard active)"
-                                    )
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                val dotColor = if (effectiveRootGranted) AppColors.success else AppColors.warning
-                                Box(Modifier.size(7.dp).clip(CircleShape).background(dotColor))
-                                Spacer(Modifier.width(6.dp))
+                                Text("Device Access Mode", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                                 Text(
-                                    if (snapshot.policy.allowRoot && effectiveRootGranted) "su forwarded to AI shell (0ms hot-reload)"
-                                    else "su / tsu / sudo blocked in AI PATH",
+                                    "Choose how LytsoCoder controls this phone",
                                     fontSize = 11.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            TextButton(
-                                enabled = !busy,
-                                onClick = {
-                                    scope.launch {
-                                        busy = true
-                                        RootShell.check()
-                                        AiPermissionsClient.refresh()
-                                        busy = false
-                                    }
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Text("Re-check", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                            Pill(modeBadgeText, modeBadgeColor)
+                        }
+
+                        val modes = DeviceAccess.Mode.entries
+                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                            modes.forEachIndexed { i, m ->
+                                SegmentedButton(
+                                    selected = m == deviceMode,
+                                    onClick = { DeviceAccess.setMode(m) },
+                                    shape = SegmentedButtonDefaults.itemShape(i, modes.size)
+                                ) {
+                                    Text(m.label, fontSize = 12.5.sp)
+                                }
                             }
                         }
+
+                        Hint(
+                            when (deviceMode) {
+                                DeviceAccess.Mode.ADB ->
+                                    "Runs as shell over Wireless debugging (pair once, auto-reconnects). In chat: \"use adb\"."
+                                DeviceAccess.Mode.SHIZUKU ->
+                                    "Runs through the Shizuku app with zero pairing. In chat: \"use shizuku\" (rish -c …)."
+                                DeviceAccess.Mode.ROOT ->
+                                    "Runs as root via su (Magisk / KernelSU / APatch) with instant 0ms AI guard. In chat: \"use su\" ($suCmd …)."
+                            }
+                        )
                     }
                 }
 
-                // 2. Unified Device Shell Access (ADB / Shizuku / Root)
-                SectionLabel("DEVICE SHELL ACCESS (ADB / SHIZUKU / ROOT)")
-                ModePicker(deviceMode, cardBg, cardBorder)
+                // Strictly contextual section — only shows controls for the selected mode!
                 when (deviceMode) {
                     DeviceAccess.Mode.ADB -> AdbSection(cardBg, cardBorder)
                     DeviceAccess.Mode.SHIZUKU -> ShizukuSection(cardBg, cardBorder)
-                    DeviceAccess.Mode.ROOT -> RootSection(cardBg, cardBorder)
+                    DeviceAccess.Mode.ROOT -> UnifiedRootControlSection(
+                        cardBg = cardBg,
+                        cardBorder = cardBorder,
+                        snapshot = snapshot,
+                        rootShellState = rootShellState,
+                        effectiveRootGranted = effectiveRootGranted,
+                        effectiveSuPath = effectiveSuPath,
+                        busy = busy,
+                        onToggleAllowRoot = { enable ->
+                            applyPolicy(
+                                snapshot.policy.copy(allowRoot = enable),
+                                if (enable) "AI root access enabled (0ms hot-reload)" else "AI root access blocked (su guard active)"
+                            )
+                        },
+                        onCheckRoot = {
+                            scope.launch {
+                                busy = true
+                                RootShell.check()
+                                AiPermissionsClient.refresh()
+                                busy = false
+                            }
+                        }
+                    )
                 }
             }
 
             1 -> {
-                // 1. Granular AI Capabilities
+                // 1. Modular AI Capabilities
                 SectionLabel("MODULAR AI CAPABILITIES")
                 Surface(shape = RoundedCornerShape(16.dp), color = cardBg, border = cardBorder, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         CapabilityToggleRow(
+                            icon = Icons.Outlined.Terminal,
+                            iconTint = MaterialTheme.colorScheme.primary,
                             title = "Shell command execution",
                             subtitle = "Allow AI to execute terminal commands",
                             checked = snapshot.policy.allowShellExec,
@@ -250,6 +271,8 @@ fun AiPermissionsAndExplorerScreen(
                         )
                         HorizontalDivider(thickness = 0.6.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                         CapabilityToggleRow(
+                            icon = Icons.Outlined.EditNote,
+                            iconTint = AppColors.accentTeal,
                             title = "File write & edit",
                             subtitle = "Allow creating, editing and deleting files",
                             checked = snapshot.policy.allowFileWrite,
@@ -258,6 +281,8 @@ fun AiPermissionsAndExplorerScreen(
                         )
                         HorizontalDivider(thickness = 0.6.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                         CapabilityToggleRow(
+                            icon = Icons.Outlined.Public,
+                            iconTint = AppColors.accentIndigo,
                             title = "Network & web access",
                             subtitle = "Allow web search, downloads and API calls",
                             checked = snapshot.policy.allowNetwork,
@@ -266,6 +291,16 @@ fun AiPermissionsAndExplorerScreen(
                         )
                         HorizontalDivider(thickness = 0.6.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Box(
+                                Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .background(QuotaGreen.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Outlined.FolderOpen, null, tint = QuotaGreen, modifier = Modifier.size(17.dp))
+                            }
+                            Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text("All files storage access", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                                 Text(
@@ -275,6 +310,7 @@ fun AiPermissionsAndExplorerScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            Spacer(Modifier.width(8.dp))
                             if (!hasAllFilesPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                 Button(
                                     onClick = {
@@ -311,21 +347,26 @@ fun AiPermissionsAndExplorerScreen(
                 }
 
                 // 2. Tool Blocker & Auto-Interrupt
+                val blocked = snapshot.policy.blockedTools
                 SectionLabel("BLOCKED TOOLS (AUTO-INTERRUPT)")
                 Surface(shape = RoundedCornerShape(16.dp), color = cardBg, border = cardBorder, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            "Auto-stop unauthorized tools",
-                            fontSize = 14.5.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            "Selected tools are abruptly interrupted if executed during or after a response, allowing the AI to continue seamlessly without stalling.",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Auto-stop unauthorized tools", fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Abruptly interrupts selected tools during or after a reply so the AI continues seamlessly.",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Pill(
+                                if (blocked.isEmpty()) "0 blocked" else "${blocked.size} blocked",
+                                if (blocked.isEmpty()) MaterialTheme.colorScheme.primary else AppColors.danger
+                            )
+                        }
 
-                        val blocked = snapshot.policy.blockedTools
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -352,12 +393,15 @@ fun AiPermissionsAndExplorerScreen(
                                     },
                                     leadingIcon = if (isBlocked) {
                                         { Icon(Icons.Outlined.Block, null, modifier = Modifier.size(14.dp), tint = AppColors.danger) }
-                                    } else null
+                                    } else null,
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = AppColors.danger.copy(alpha = 0.16f),
+                                        selectedLabelColor = AppColors.danger
+                                    )
                                 )
                             }
                         }
 
-                        // Custom tool / MCP tool input
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -392,7 +436,6 @@ fun AiPermissionsAndExplorerScreen(
                             }
                         }
 
-                        // Custom blocked tools not in preset list
                         val customBlocked = blocked.filterNot { it in COMMON_BLOCKABLE_TOOLS }
                         if (customBlocked.isNotEmpty()) {
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -427,6 +470,22 @@ fun AiPermissionsAndExplorerScreen(
                                         }
                                     }
                                 }
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Outlined.Info, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "Tip: Tap the trash icon on any tool or System: card in chat to delete it, or expand a card to block that tool in one tap.",
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -588,6 +647,180 @@ fun AiPermissionsAndExplorerScreen(
     }
 }
 
+/**
+ * Single unified Root control panel shown ONLY when DeviceAccess.Mode.ROOT is active.
+ * Combines the 0ms hot-reload `ai_bin_guard` toggle, Magisk/KernelSU/APatch verification, and inline `id` test
+ * without any duplicate cards.
+ */
+@Composable
+private fun UnifiedRootControlSection(
+    cardBg: Color,
+    cardBorder: BorderStroke,
+    snapshot: lytso.code.data.security.AiPermissionsSnapshot,
+    rootShellState: RootShell.State,
+    effectiveRootGranted: Boolean,
+    effectiveSuPath: String,
+    busy: Boolean,
+    onToggleAllowRoot: (Boolean) -> Unit,
+    onCheckRoot: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var testingId by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<String?>(null) }
+
+    val aiRootActive = snapshot.policy.allowRoot && effectiveRootGranted
+    val isChecking = busy || rootShellState.check == RootShell.Check.CHECKING
+
+    Surface(shape = RoundedCornerShape(16.dp), color = cardBg, border = cardBorder, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background((if (aiRootActive) QuotaGreen else if (effectiveRootGranted) AppColors.warning else AppColors.danger).copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        if (aiRootActive) Icons.Outlined.VerifiedUser else Icons.Outlined.AdminPanelSettings,
+                        null,
+                        tint = if (aiRootActive) QuotaGreen else if (effectiveRootGranted) AppColors.warning else AppColors.danger,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Allow Root (su) for AI", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    val statusLine = when {
+                        isChecking -> "Verifying su binary…"
+                        effectiveRootGranted -> "Verified · ${effectiveSuPath.ifBlank { "su" }}"
+                        snapshot.rootBinaryFound || rootShellState.check == RootShell.Check.DENIED ->
+                            "su found, permission denied in root manager"
+                        else -> "No su binary found (device not rooted)"
+                    }
+                    Text(statusLine, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(
+                    checked = aiRootActive,
+                    enabled = !isChecking && effectiveRootGranted,
+                    onCheckedChange = onToggleAllowRoot,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+            }
+
+            // Live guard indicator pill
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background((if (aiRootActive) QuotaGreen else AppColors.warning).copy(alpha = 0.10f))
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
+            ) {
+                Box(
+                    Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(if (aiRootActive) QuotaGreen else AppColors.warning)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (aiRootActive) "su / sudo / tsu forwarded to AI shell (0ms hot-reload)"
+                    else "su / sudo / tsu blocked in AI PATH (guard active)",
+                    fontSize = 11.5.sp,
+                    color = if (aiRootActive) QuotaGreen else AppColors.warning,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            rootShellState.message?.takeIf { !effectiveRootGranted }?.let { errMsg ->
+                Text(errMsg, fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+            }
+
+            HorizontalDivider(thickness = 0.6.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+
+            // Quick actions: Check root + Test (id)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedButton(
+                    enabled = !isChecking,
+                    onClick = onCheckRoot,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    if (isChecking) {
+                        CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    } else {
+                        Icon(Icons.Outlined.Refresh, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(if (effectiveRootGranted) "Re-check" else "Check root", fontSize = 12.5.sp, maxLines = 1)
+                }
+
+                if (effectiveRootGranted) {
+                    OutlinedButton(
+                        enabled = !testingId,
+                        onClick = {
+                            testingId = true
+                            scope.launch {
+                                val r = DeviceAccess.shell("id", 20, DeviceAccess.Mode.ROOT)
+                                testResult = r.output.trim().ifBlank { "exit code ${r.exitCode}" }
+                                testingId = false
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Outlined.PlayArrow, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (testingId) "Running…" else "Test (id)", fontSize = 12.5.sp, maxLines = 1)
+                    }
+                }
+            }
+
+            testResult?.let { Mono(it) }
+        }
+    }
+
+    // Compact security notice
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.error.copy(alpha = 0.08f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.WarningAmber, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "Root grants full system control (Magisk, KernelSU, APatch). Toggle off anytime for instant 0ms lockout.",
+                fontSize = 11.5.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f)
+            )
+        }
+    }
+
+    // Compact terminal usage card
+    Surface(shape = RoundedCornerShape(14.dp), color = cardBg, border = cardBorder, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Use in terminal", fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+            if (AdbConnectManager.inChroot) {
+                Mono("android-su -c 'pm list packages'\nandroid-su            # interactive")
+                Hint("In the Ubuntu chroot, android-su runs commands as Android root through LytsoCoder.")
+            } else {
+                Mono("su -c 'pm list packages'\nsu")
+                Hint("Uses the device's verified su binary directly through the AI root guard.")
+            }
+        }
+    }
+}
+
 @Composable
 private fun SectionLabel(text: String) {
     Text(
@@ -602,6 +835,8 @@ private fun SectionLabel(text: String) {
 
 @Composable
 private fun CapabilityToggleRow(
+    icon: ImageVector,
+    iconTint: Color,
     title: String,
     subtitle: String,
     checked: Boolean,
@@ -609,6 +844,16 @@ private fun CapabilityToggleRow(
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(iconTint.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = iconTint, modifier = Modifier.size(17.dp))
+        }
+        Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

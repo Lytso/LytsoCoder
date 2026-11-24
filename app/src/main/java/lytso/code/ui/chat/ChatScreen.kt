@@ -2490,6 +2490,7 @@ fun ChatScreen(
                                                         onApproveTool = if (isTool) { { toolCall -> viewModel.approveAndExecuteTerminalTool(toolCall, feedItem.messageId) } } else null,
                                                         onRejectTool = if (isTool) { { toolCall -> if (toolCall.toolType == ToolType.ASK_CHOICE) viewModel.cancelUserChoices(toolCall, feedItem.messageId) else viewModel.rejectTerminalTool(toolCall, feedItem.messageId) } } else null,
                                                         onTerminateTool = if (isTool) { { toolCall -> viewModel.terminateRunningTerminalTool(toolCall, feedItem.messageId) } } else null,
+                                                        onDeleteTool = if (isTool && !isReadOnlyChat) { { toolCall -> viewModel.deleteToolStep(toolCall, feedItem.messageId) } } else null,
                                                         onSubmitChoices = if (isTool) { { toolCall, responses, summaryPayload -> viewModel.submitUserChoices(toolCall, feedItem.messageId, responses, summaryPayload) } } else null,
                                                         onSkipChoices = if (isTool) { { toolCall, responses -> viewModel.skipUserChoices(toolCall, feedItem.messageId, responses) } } else null,
                                                         onDeleteThought = if (!isReadOnlyChat && !isStreamActive && !isActivelyRunning) {
@@ -2562,6 +2563,9 @@ fun ChatScreen(
                                                 onTerminateTool = { toolCall, msgId ->
                                                     viewModel.terminateRunningTerminalTool(toolCall, msgId)
                                                 },
+                                                onDeleteTool = if (!isReadOnlyChat) { { toolCall, msgId ->
+                                                    viewModel.deleteToolStep(toolCall, msgId)
+                                                } } else null,
                                                 onSubmitChoices = { toolCall, msgId, responses, summaryPayload ->
                                                     viewModel.submitUserChoices(toolCall, msgId, responses, summaryPayload)
                                                 },

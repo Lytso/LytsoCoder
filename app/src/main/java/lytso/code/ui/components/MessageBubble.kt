@@ -71,6 +71,7 @@ fun MessageBubble(
     onApproveTool: ((lytso.code.domain.model.ToolCall, String) -> Unit)? = null,
     onRejectTool: ((lytso.code.domain.model.ToolCall, String) -> Unit)? = null,
     onTerminateTool: ((lytso.code.domain.model.ToolCall, String) -> Unit)? = null,
+    onDeleteTool: ((lytso.code.domain.model.ToolCall, String) -> Unit)? = null,
     onSubmitChoices: ((lytso.code.domain.model.ToolCall, String, List<lytso.code.data.remote.dto.AskQuestionResponseItemDto>, String) -> Unit)? = null,
     onSkipChoices: ((lytso.code.domain.model.ToolCall, String, List<lytso.code.data.remote.dto.AskQuestionResponseItemDto>) -> Unit)? = null,
     onUpdateSummary: ((String) -> Unit)? = null,
@@ -258,6 +259,7 @@ fun MessageBubble(
                             onApproveTool = if (onApproveTool != null) { toolCall -> onApproveTool(toolCall, message.id) } else null,
                             onRejectTool = if (onRejectTool != null) { toolCall -> onRejectTool(toolCall, message.id) } else null,
                             onTerminateTool = if (onTerminateTool != null) { toolCall -> onTerminateTool(toolCall, message.id) } else null,
+                            onDeleteTool = if (onDeleteTool != null) { toolCall -> onDeleteTool(toolCall, message.id) } else null,
                             onSubmitChoices = if (onSubmitChoices != null) { toolCall, responses, summary -> onSubmitChoices(toolCall, message.id, responses, summary) } else null,
                             onSkipChoices = if (onSkipChoices != null) { toolCall, responses -> onSkipChoices(toolCall, message.id, responses) } else null
                         )

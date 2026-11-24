@@ -160,6 +160,7 @@ class AgyChatBackend(
     init {
         // moving a model to another quota group, or switching the pill between 5h and 7d, updates the pill right away
         lytso.code.domain.model.ModelGroupPrefs.init(application)
+        lytso.code.data.security.HiddenToolStepsStore.init(application)
         // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
         // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
         backendScope.launch {
@@ -3429,6 +3430,34 @@ class AgyChatBackend(
         list.forEach { approval ->
             rejectTerminalTool(approval.toolCall, approval.messageId, reason)
         }
+    }
+
+    /**
+     * Deletes a tool card or `System:` notice from the chat UI (and persists the removal across stream updates
+     * and restarts). If the step is still running, also cancels that specific step without halting the AI.
+     */
+    fun deleteToolStep(toolCall: lytso.code.domain.model.ToolCall, messageId: String) {
+        val conv = _currentConversation.value ?: return
+        lytso.code.data.security.HiddenToolStepsStore.hide(conv.id, toolCall.stepIndex, toolCall.id)
+        if (toolCall.status == "RUNNING" && toolCall.stepIndex != null) {
+            val stepIndex = toolCall.stepIndex
+            trajectoryEngine.optimisticUpdateStepStatus(
+                stepIndex = stepIndex,
+                status = lytso.code.data.remote.dto.CortexStepStatuses.CANCELED,
+                output = "Deleted by user."
+            )
+            backendScope.launch {
+                val hubUrl = AuthPreferences.currentHubUrl
+                agyHubClient.cancelCascadeSteps(
+                    cascadeId = conv.id,
+                    stepIndices = listOf(stepIndex),
+                    hubUrl = hubUrl
+                )
+            }
+        }
+        val updated = trajectoryEngine.toChatMessages(conv.id)
+        _messages.value = updated
+        lytso.code.ui.chat.ChatFeedCache.prewarm(updated)
     }
 
     fun terminateRunningTerminalTool(toolCall: lytso.code.domain.model.ToolCall, messageId: String) {

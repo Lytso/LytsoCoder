@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Functions
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Notifications
@@ -64,6 +65,7 @@ fun AgentToolCallCard(
     onApprove: ((ToolCall) -> Unit)? = null,
     onReject: ((ToolCall) -> Unit)? = null,
     onTerminate: ((ToolCall) -> Unit)? = null,
+    onDelete: ((ToolCall) -> Unit)? = null,
     onSubmitChoices: ((ToolCall, List<AskQuestionResponseItemDto>, String) -> Unit)? = null,
     onSkipChoices: ((ToolCall, List<AskQuestionResponseItemDto>) -> Unit)? = null
 ) {
@@ -351,6 +353,28 @@ fun AgentToolCallCard(
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (isSuccess) QuotaGreen else Color.Red
+                    )
+                }
+            }
+
+            // One-tap Trash (Delete) button on every tool card & System: notice
+            if (onDelete != null) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .clickable(
+                            role = androidx.compose.ui.semantics.Role.Button,
+                            onClick = { onDelete(toolCall) }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.DeleteOutline,
+                        contentDescription = "Delete step",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                        modifier = Modifier.size(14.dp)
                     )
                 }
             }

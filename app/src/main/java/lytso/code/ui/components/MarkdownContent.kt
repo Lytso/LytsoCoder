@@ -186,6 +186,7 @@ fun MarkdownBlockView(
     onApproveTool: ((lytso.code.domain.model.ToolCall) -> Unit)? = null,
     onRejectTool: ((lytso.code.domain.model.ToolCall) -> Unit)? = null,
     onTerminateTool: ((lytso.code.domain.model.ToolCall) -> Unit)? = null,
+    onDeleteTool: ((lytso.code.domain.model.ToolCall) -> Unit)? = null,
     onSubmitChoices: ((lytso.code.domain.model.ToolCall, List<lytso.code.data.remote.dto.AskQuestionResponseItemDto>, String) -> Unit)? = null,
     onSkipChoices: ((lytso.code.domain.model.ToolCall, List<lytso.code.data.remote.dto.AskQuestionResponseItemDto>) -> Unit)? = null,
     onDeleteThought: ((MarkdownBlock.AgentThought) -> Unit)? = null
@@ -207,6 +208,7 @@ fun MarkdownBlockView(
                 onApprove = onApproveTool,
                 onReject = onRejectTool,
                 onTerminate = onTerminateTool,
+                onDelete = onDeleteTool,
                 onSubmitChoices = onSubmitChoices,
                 onSkipChoices = onSkipChoices,
                 modifier = modifier
@@ -505,6 +507,7 @@ fun MarkdownContent(
     onApproveTool: ((lytso.code.domain.model.ToolCall) -> Unit)? = null,
     onRejectTool: ((lytso.code.domain.model.ToolCall) -> Unit)? = null,
     onTerminateTool: ((lytso.code.domain.model.ToolCall) -> Unit)? = null,
+    onDeleteTool: ((lytso.code.domain.model.ToolCall) -> Unit)? = null,
     onSubmitChoices: ((lytso.code.domain.model.ToolCall, List<lytso.code.data.remote.dto.AskQuestionResponseItemDto>, String) -> Unit)? = null,
     onSkipChoices: ((lytso.code.domain.model.ToolCall, List<lytso.code.data.remote.dto.AskQuestionResponseItemDto>) -> Unit)? = null
 ) {
@@ -531,6 +534,7 @@ fun MarkdownContent(
                 onApproveTool = onApproveTool,
                 onRejectTool = onRejectTool,
                 onTerminateTool = onTerminateTool,
+                onDeleteTool = onDeleteTool,
                 onSubmitChoices = onSubmitChoices,
                 onSkipChoices = onSkipChoices
             )

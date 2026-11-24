@@ -939,6 +939,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun approveAllPendingTools(list: List<PendingToolApproval>) = if (isCodexActive) list.forEach { codexBackend.approveTool(it.toolCall) } else if (isOpenCodeActive) list.forEach { openCodeBackend.approveTool(it.toolCall) } else if (isClaudeActive) list.forEach { claudeBackend.approveTool(it.toolCall) } else agyBackend.approveAllPendingTools(list)
     fun rejectAllPendingTools(list: List<PendingToolApproval>, reason: String? = null) = if (isCodexActive) list.forEach { codexBackend.rejectTool(it.toolCall, reason) } else if (isOpenCodeActive) list.forEach { openCodeBackend.rejectTool(it.toolCall, reason) } else if (isClaudeActive) list.forEach { claudeBackend.rejectTool(it.toolCall, reason) } else agyBackend.rejectAllPendingTools(list, reason)
     fun terminateRunningTerminalTool(toolCall: lytso.code.domain.model.ToolCall, messageId: String) = if (isCodexActive) codexBackend.stopStreaming() else if (isOpenCodeActive) openCodeBackend.stopStreaming() else if (isClaudeActive) claudeBackend.stopStreaming() else agyBackend.terminateRunningTerminalTool(toolCall, messageId)
+    fun deleteToolStep(toolCall: lytso.code.domain.model.ToolCall, messageId: String) {
+        if (!isCodexActive && !isOpenCodeActive && !isClaudeActive) {
+            agyBackend.deleteToolStep(toolCall, messageId)
+            return
+        }
+        val convId = currentConversation.value?.id ?: ""
+        if (convId.isNotBlank()) {
+            lytso.code.data.security.HiddenToolStepsStore.hide(convId, toolCall.stepIndex, toolCall.id)
+        }
+        val token = "<!-- tool_call:${toolCall.id} -->"
+        store.messages.value = store.messages.value.map { msg ->
+            if (msg.id != messageId) msg
+            else msg.copy(
+                content = msg.content.replace(token, "").replace(Regex("\n{3,}"), "\n\n").trim(),
+                toolCalls = msg.toolCalls.filterNot { it.id == toolCall.id }
+            )
+        }
+    }
     fun proceedAfterTermination(toolCall: lytso.code.domain.model.ToolCall, messageId: String, userInstructions: String?) {
         if (isClaudeActive || isOpenCodeActive || isCodexActive) {
             store.terminatedToolDialog.value = null
