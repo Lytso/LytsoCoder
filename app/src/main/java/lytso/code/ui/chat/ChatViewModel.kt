@@ -21,6 +21,8 @@ import lytso.code.domain.model.ModelQuota
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -402,9 +404,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-    fun selectConversation(id: String) {
+    /** [agent]: the chat's agent when the caller knows it (a home-screen link: the chat list may not be loaded yet). */
+    fun selectConversation(id: String, agent: AgentKind = agentOf(id)) {
         flushMemoryWait()
-        when (agentOf(id)) {
+        when (agent) {
             AgentKind.CLAUDE -> {
                 agyBackend.detach()
                 openCodeBackend.detach()
@@ -437,6 +440,102 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+    private var outsideOpenJob: Job? = null
+
+    /**
+     * A home-screen shortcut or widget asked for this chat. It opens once its agent's chats have loaded: right after a
+     * cold start they are still on their way, and opening earlier would race Antigravity's start-up chat. The link's
+     * agent is used, so a Claude chat never goes to Antigravity just because its list was not there yet.
+     */
+    fun openChatFromOutside(id: String, agent: AgentKind) {
+        if (agent !in enabledAgents.value) {
+            lytso.code.ui.components.AppToastHelper.showToast(
+                "${lytso.code.data.homescreen.HomeIcons.agentLabel(agent)} is turned off: turn it on in Settings → Agents",
+                lytso.code.ui.components.ChatToastType.INFO
+            )
+            return
+        }
+        outsideOpenJob?.cancel()
+        outsideOpenJob = viewModelScope.launch {
+            if (currentConversation.value?.id == id) return@launch
+            val list = when (agent) {
+                AgentKind.AGY -> _conversations
+                AgentKind.CLAUDE -> claudeBackend.conversations
+                AgentKind.OPENCODE -> openCodeBackend.conversations
+                AgentKind.CODEX -> codexBackend.conversations
+            }
+            withTimeoutOrNull(if (agent == AgentKind.AGY) 20_000L else 8_000L) { list.first { it.isNotEmpty() } }
+            if (currentConversation.value?.id != id) selectConversation(id, agent)
+        }
+    }
+
+    /** A home-screen "New chat": with [agent] (null or turned off: the new-chat default), after the start-up chat. */
+    fun startNewChatFromOutside(agent: AgentKind?) {
+        outsideOpenJob?.cancel()
+        outsideOpenJob = viewModelScope.launch {
+            // right after a cold start Antigravity opens its start-up chat first; a new chat made before could be replaced
+            withTimeoutOrNull(4_000L) { currentConversation.first { it != null } }
+            val usable = agent?.takeIf { it in enabledAgents.value }
+            if (agent != null && usable == null) {
+                lytso.code.ui.components.AppToastHelper.showToast(
+                    "${lytso.code.data.homescreen.HomeIcons.agentLabel(agent)} is turned off: starting a chat with your default agent",
+                    lytso.code.ui.components.ChatToastType.INFO
+                )
+            }
+            if (usable == null) startNewChat() else startNewChat(usable)
+        }
+    }
+
+    /**
+     * Voice call tile / shortcut: opens the AGY chat that last had a voice call (a new AGY chat when none did) and waits
+     * until it is the chat on screen. Returns its id (null if it did not open in time).
+     */
+    suspend fun openLastCallChat(): String? {
+        val target = findLastCallChat()
+        withContext(Dispatchers.Main) {
+            when {
+                target == null -> startNewChat(AgentKind.AGY)
+                currentConversation.value?.id != target.id -> selectConversation(target.id)
+            }
+        }
+        return withTimeoutOrNull(15_000) {
+            agyBackend.currentConversation.first { c -> c != null && c.agent == AgentKind.AGY && (target == null || c.id == target.id) }
+        }?.id
+    }
+
+    /** A call started by the Voice call tile or shortcut: [openLastCallChat], then what the call button does for the chat on screen. */
+    suspend fun prepareVoiceCallInLastCallChat(): Pair<String, Int> {
+        openLastCallChat()
+        agyBackend.currentConversation.value?.title?.takeIf { it.isNotBlank() && it != "New Chat" }
+            ?.let { lytso.code.data.voice.AgyVoiceCall.retitle(it) }
+        return agyBackend.prepareVoiceCall()
+    }
+
+    /**
+     * The newest AGY chat (not a cloud chat) that had a voice call: the ones the app remembers first; calls from before
+     * it remembered them are found by asking the hub about the newest chats (it keeps each chat's calls).
+     */
+    private suspend fun findLastCallChat(): Conversation? {
+        val hub = AuthPreferences.currentHubUrl.trimEnd('/')
+        // right after the app starts, the chat list may still be on its way
+        val all = agyBackend.conversations.value.ifEmpty {
+            withTimeoutOrNull(8_000) { agyBackend.conversations.first { it.isNotEmpty() } } ?: emptyList()
+        }
+        val local = all.filter { it.agent == AgentKind.AGY && !it.isCloud }
+        lytso.code.data.voice.AgyVoicePreferences.callChats(hub)
+            .firstNotNullOfOrNull { id -> local.firstOrNull { it.id == id } }
+            ?.let { return it }
+        val recent = local.sortedByDescending { it.updatedAt }.take(20)
+        val lastCallAt = coroutineScope {
+            recent.map { c ->
+                async { c to lytso.code.data.voice.AgyVoiceChats.fetch(c.id)?.maxOfOrNull { it.startedAtMs ?: 0L } }
+            }.awaitAll()
+        }
+        val found = lastCallAt.mapNotNull { (c, at) -> at?.let { c to it } }.maxByOrNull { it.second }?.first ?: return null
+        lytso.code.data.voice.AgyVoicePreferences.rememberCallChat(hub, found.id)
+        return found
+    }
+
     fun startPersistentStream(conversationId: String) = agyBackend.startPersistentStream(conversationId)
     fun deleteConversation(id: String) {
         when (agentOf(id)) {
@@ -454,6 +553,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         lytso.code.data.jarvis.JarvisController.onChatDeleted(id)
         // Agent memory: its history file goes too (memories it saved stay)
         lytso.code.data.memory.MemorySync.onChatDeleted(id)
+        // its home-screen shortcut is greyed out, and it leaves the app icon's menu
+        lytso.code.data.homescreen.HomeShortcuts.onChatDeleted(getApplication(), id)
     }
     fun forkConversation(id: String) {
         flushMemoryWait()
@@ -600,10 +701,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return prompt
     }
 
-    /** Editing the first message drops the hidden context with it: send it again with the next message. */
-    private fun forgetContextIfFirst(targetId: String) {
-        val firstUser = messages.value.firstOrNull { it.role == MessageRole.USER } ?: return
-        if (firstUser.id == targetId) lytso.code.data.context.GlobalContext.forget(currentConversation.value?.id)
+    /**
+     * Undoing a chat's first prompt makes the chat start over: its next message is a first message again, with the
+     * global context and the Agent memory text. Returns what to run once the undo worked (null: not the first prompt).
+     */
+    private fun restartIfFirst(targetId: String): (() -> Unit)? {
+        val firstUser = messages.value.firstOrNull { it.role == MessageRole.USER } ?: return null
+        if (firstUser.id != targetId) return null
+        val chatId = currentConversation.value?.id?.takeIf { it.isNotBlank() } ?: return null
+        return {
+            lytso.code.data.context.GlobalContext.restart(chatId)
+            lytso.code.data.memory.AgentMemory.forget(chatId)
+        }
     }
 
     val isTranscribingAudio = agyBackend.isTranscribingAudio
@@ -630,8 +739,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return agyBackend.prepareEditMessage(messageId)?.let { restoreAttachedFiles(it); editableText(it) }
     }
     fun revertAndEditLastUserMessage(targetMsg: ChatMessage, onRestored: (String) -> Unit) {
-        forgetContextIfFirst(targetMsg.id)
-        val restored: (String) -> Unit = { restoreAttachedFiles(it); onRestored(editableText(it)) }
+        val restart = restartIfFirst(targetMsg.id)
+        val restored: (String) -> Unit = { restart?.invoke(); restoreAttachedFiles(it); onRestored(editableText(it)) }
         if (isCodexActive) codexBackend.editMessage(targetMsg.id, restored)
         else if (isOpenCodeActive) openCodeBackend.editMessage(targetMsg.id, restoreFiles = false, restored)
         else if (isClaudeActive) claudeBackend.editMessage(targetMsg.id, restoreCode = false, restored)
@@ -640,7 +749,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Claude: edit a sent prompt in a copy of the chat that ends before it; optionally restore the files changed since. */
     fun editClaudeMessage(targetMsg: ChatMessage, restoreCode: Boolean, onRestored: (String) -> Unit) {
-        val restored: (String) -> Unit = { restoreAttachedFiles(it); onRestored(editableText(it)) }
+        val restart = restartIfFirst(targetMsg.id)
+        val restored: (String) -> Unit = { restart?.invoke(); restoreAttachedFiles(it); onRestored(editableText(it)) }
         if (isCodexActive) codexBackend.editMessage(targetMsg.id, restored)
         else if (isOpenCodeActive) openCodeBackend.editMessage(targetMsg.id, restoreCode, restored)
         else claudeBackend.editMessage(targetMsg.id, restoreCode, restored)
@@ -949,6 +1059,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun consumeRequestedViewMode() {
         requestedViewMode.value = null
+    }
+
+    /** A settings page another screen wants shown (a SettingsSection name, e.g. the terminal drawer's gear); ChatScreen opens it. */
+    val requestedSettingsSection = MutableStateFlow<String?>(null)
+
+    fun requestSettingsSection(section: String) {
+        requestedSettingsSection.value = section
+    }
+
+    fun consumeRequestedSettingsSection() {
+        requestedSettingsSection.value = null
     }
 
     /** Antigravity's chat state (shared store); Claude Code keeps its own, see [messages]. */
@@ -1416,6 +1537,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val floatingSwitcherOrientation: StateFlow<String> = authPrefs.floatingSwitcherOrientation
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), authPrefs.getFloatingSwitcherOrientationSync())
 
+    val floatingSwitcherHandleIcon: StateFlow<String> = authPrefs.floatingSwitcherHandleIcon
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), authPrefs.getFloatingSwitcherHandleIconSync())
+
     val floatingSwitcherItems: StateFlow<List<String>> = authPrefs.floatingSwitcherItems
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), authPrefs.getFloatingSwitcherItemsSync())
 
@@ -1440,6 +1564,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun setFloatingSwitcherOrientation(orientation: String) {
         viewModelScope.launch {
             authPrefs.saveFloatingSwitcherOrientation(orientation)
+        }
+    }
+
+    fun setFloatingSwitcherHandleIcon(icon: String) {
+        viewModelScope.launch {
+            authPrefs.saveFloatingSwitcherHandleIcon(icon)
         }
     }
 
@@ -1482,6 +1612,29 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             authPrefs.saveGroupChatsByWorkspace(enabled)
         }
+    }
+
+    /** Fold runs of agent steps into pills: see [lytso.code.ui.chat.StepGroups]. */
+    val groupAgentSteps: StateFlow<Boolean> = authPrefs.groupAgentSteps
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), authPrefs.getGroupAgentStepsSync())
+
+    fun setGroupAgentSteps(enabled: Boolean) {
+        viewModelScope.launch { authPrefs.saveGroupAgentSteps(enabled) }
+    }
+
+    /** How many steps in a row fold into a pill (Group Agent Steps → Fold after). */
+    val groupStepsMin: StateFlow<Int> = authPrefs.groupStepsMin
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), authPrefs.getGroupStepsMinSync())
+
+    fun setGroupStepsMin(steps: Int) {
+        viewModelScope.launch { authPrefs.saveGroupStepsMin(steps) }
+    }
+
+    val showMessageStats: StateFlow<Boolean> = authPrefs.showMessageStats
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), authPrefs.getShowMessageStatsSync())
+
+    fun setShowMessageStats(show: Boolean) {
+        viewModelScope.launch { authPrefs.saveShowMessageStats(show) }
     }
 
     fun setFloatingBubbleEnabled(enabled: Boolean) {

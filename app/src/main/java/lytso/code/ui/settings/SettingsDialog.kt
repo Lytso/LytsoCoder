@@ -87,15 +87,19 @@ import lytso.code.data.daemon.IdeApiClient
 enum class SettingsSection(val title: String, val subtitle: String) {
     MAIN("Settings & Preferences", "Configure your LytsoCoder experience"),
     THEMES("Themes", "Light and dark mode, Neon palettes and theme gallery"),
-    APPEARANCE("Appearance", "Chat text size, chat list, header icons and the app switcher"),
+    APPEARANCE("Appearance", "Chat text size, agent steps, message stats, header icons, the app switcher and Gemmy"),
+    HOME_SCREEN("Home screen", "Widgets, shortcuts to chats and pages, scripts, and the app icon's menu"),
     STEM_RENDERING("STEM & diagrams", "Chemistry, graphs, geometry, simulations, circuits and offline Mermaid in chats"),
-    SERVERS("Servers & Connectivity", "Configure AGY Hub and IDE Bridge endpoints"),
+    SERVERS("Where agents run", "This phone (LytsoCoder or Ubuntu chroot) or your server, and how the app reaches it"),
     CONNECT_PC("Connect to PC", "Use the agents on your PC (LytsoCoder in VS Code) from this phone"),
     WEBVIEW_EXTENSIONS("Custom LytsoCoder Plugins", "Install and manage plugins: MCP tools and skills"),
     SLASH_COMMANDS("Slash Commands", "Your own / commands and what they expand to"),
     MCP("MCP Servers", "Model Context Protocol tools & integrations"),
     SKILLS_PLUGINS("Skills & Plugins", "Agent capabilities, Google plugins, and extensions"),
-    TERMINAL("Terminal & Shell", "SSH configuration, local tools, and styling"),
+    TERMINAL("Terminal", "Font, cursor and colors, and SSH for terminal tabs"),
+    UBUNTU_CHROOT("Ubuntu chroot", "Status, mounts, shared folders, storage, packages and settings of the rooted Ubuntu"),
+    /** Not a page: shown in place of a Termux-only page while the Ubuntu chroot is the phone's runtime. */
+    TERMUX_ONLY("Termux only", "Works with the Termux environment"),
     BACKUPS("Backups & Restore", "Backup rootfs environment and AGY chat histories"),
     DATA_PROTECTION("Data Loss Protection", "Uninstall shield & App Info clear data protection"),
     PROJECT_CHECKPOINTS("Project checkpoints", "Go back to before any chat message: files restored with a preview"),
@@ -103,6 +107,7 @@ enum class SettingsSection(val title: String, val subtitle: String) {
     ANTIGRAVITY("Antigravity", "Account & CLI, MCP servers, skills & plugins, commands & permissions"),
     AGY_CLI("Account & CLI", "Google sign-in, agy version and install, on this device or the server"),
     AGY_CLOUD("Cloud agents", "Antigravity chats on a Google cloud machine (Remote Agents)"),
+    AGY_VOICE("Voice calls", "The Voice call tile and shortcut, and the floating call window"),
     CLAUDE("Claude Code", "Account, models, permissions, MCP, plugins & memory"),
     /** One Claude Code page (which one: the dialog's claudePage); not a page of its own for Jarvis. */
     CLAUDE_PAGE("Claude Code", "Account, models, permissions, MCP, plugins & memory"),
@@ -132,7 +137,7 @@ enum class SettingsSection(val title: String, val subtitle: String) {
     DIAGNOSTICS("Diagnostics & Performance", "Live network connections, active streams & thread HUD"),
     UTILITIES("Utilities", "Handy device tools"),
     GITHUB("GitHub", "Sign in with the GitHub CLI, your repositories and git credentials"),
-    ADB_CONNECT("ADB Connect", "Connect the terminal's adb to this phone over Wireless debugging"),
+    ADB_CONNECT("ADB Connect", "Shell access to this phone through adb (Wireless debugging), Shizuku or root"),
     ANDROID_AUTOMATION("Android Automation", "Let AI agents see and control this phone"),
     REA("REA · Reverse Engineering", "Let agents analyze APKs, Flutter, React Native and native code"),
     REA_GROUPS("REA Tool Groups", "Which REA tools each REA MCP server shows"),
@@ -140,6 +145,7 @@ enum class SettingsSection(val title: String, val subtitle: String) {
     TERMUX_SUPPORT("Termux Support", "Termux:API and the X11 desktop"),
     TERMUX_API("Termux:API", "How termux-api commands are handled"),
     X11_DESKTOP("X11 Desktop", "Linux desktop apps with Termux:X11"),
+    UPDATES("Updates", "Beta updates, and how often LytsoCoder checks for a new version"),
     CHANGELOG("What's new", "Every LytsoCoder version and what changed"),
     ABOUT("About & Info", "App version, package details, and bridge export");
 
@@ -160,18 +166,33 @@ enum class SettingsSection(val title: String, val subtitle: String) {
 
     /** Where Back goes from this section. */
     val parent: SettingsSection get() = when (this) {
-        AGY_CLI, AGY_CLOUD, MCP, SKILLS_PLUGINS, COMMANDS -> ANTIGRAVITY
+        AGY_CLI, AGY_CLOUD, AGY_VOICE, MCP, SKILLS_PLUGINS, COMMANDS -> ANTIGRAVITY
         CLAUDE_PAGE -> CLAUDE
         OPENCODE_PAGE -> OPENCODE
         CODEX_PAGE -> CODEX
-        TERMUX_API, X11_DESKTOP -> TERMUX_SUPPORT
+        TERMUX_API -> TERMUX_SUPPORT
+        // with the Ubuntu chroot the X11 row is on the main page (Termux Support is Termux-only there)
+        X11_DESKTOP -> if (chrootRunsPhone()) MAIN else TERMUX_SUPPORT
         REA_GROUPS -> REA
-        AGENT_MEMORY -> AGENTS
+        UBUNTU_CHROOT -> SERVERS
+        GLOBAL_CONTEXT, AGENT_MEMORY, EGM -> AGENTS
         AGENT_HISTORY -> AGENT_MEMORY
         CHANGELOG -> ABOUT
         else -> if (jarvisPage != null) JARVIS else MAIN
     }
 }
+
+/**
+ * Pages that run the Termux environment's own tools (Termux:API, backups, the GitHub CLI). REA, Android development
+ * and the X11 desktop work in the Ubuntu chroot too (they install into it), so they are not here.
+ */
+private val TERMUX_ONLY_SECTIONS = setOf(
+    SettingsSection.TERMUX_SUPPORT, SettingsSection.TERMUX_API, SettingsSection.BACKUPS, SettingsSection.GITHUB
+)
+
+/** The Ubuntu chroot is this phone's runtime (not server mode): Termux-only pages show a notice instead. */
+private fun chrootRunsPhone(): Boolean =
+    !lytso.code.data.preferences.AuthPreferences.currentRemoteMode && lytso.code.data.local.chroot.ChrootManager.isActiveNow()
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -258,6 +279,8 @@ fun SettingsDialog(
     floatingSwitcherItems: List<String> = listOf("chat", "ide", "terminal", "browser", "notes", "files"),
     floatingSwitcherAutoCollapseSec: Int = 0,
     onSetFloatingSwitcherOrientation: (String) -> Unit = {},
+    floatingSwitcherHandleIcon: String = "grid",
+    onSetFloatingSwitcherHandleIcon: (String) -> Unit = {},
     onSetFloatingSwitcherItems: (List<String>) -> Unit = {},
     onSetFloatingSwitcherAutoCollapseSec: (Int) -> Unit = {},
     onResetFloatingSwitcherPosition: () -> Unit = {},
@@ -267,8 +290,12 @@ fun SettingsDialog(
     commandSandboxEnabled: Boolean = false,
     requireApprovalForFileEdits: Boolean = false,
     defaultApprovalScope: String = "PERMISSION_SCOPE_ONCE",
-    groupChatsByWorkspace: Boolean = false,
-    onToggleGroupChatsByWorkspace: (Boolean) -> Unit = {},
+    groupAgentSteps: Boolean = true,
+    onToggleGroupAgentSteps: (Boolean) -> Unit = {},
+    groupStepsMin: Int = 2,
+    onSetGroupStepsMin: (Int) -> Unit = {},
+    showMessageStats: Boolean = true,
+    onToggleShowMessageStats: (Boolean) -> Unit = {},
     globalSecuritySettings: lytso.code.data.remote.AgyHubClient.GlobalUserSettings? = null,
     globalSettingsError: String? = null,
     isGlobalSettingsLoading: Boolean = false,
@@ -321,6 +348,8 @@ fun SettingsDialog(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var currentSection by remember { mutableStateOf(initialSection ?: if (initialClaudePage != null && claude != null) SettingsSection.CLAUDE_PAGE else SettingsSection.MAIN) }
+    // the Ubuntu chroot shown on its page (null: the one in use)
+    var chrootManagePath by remember { mutableStateOf<String?>(null) }
     var claudePage by remember { mutableStateOf(initialClaudePage ?: lytso.code.ui.claude.ClaudeSettingsPage.ACCOUNT) }
     var openCodePage by remember { mutableStateOf(initialOpenCodePage ?: lytso.code.ui.opencode.OpenCodeSettingsPage.SERVER) }
     LaunchedEffect(initialOpenCodePage) {
@@ -458,7 +487,27 @@ fun SettingsDialog(
                     .weight(1f),
                 label = "SettingsSectionTransition"
             ) { section ->
-                when (section) {
+                // pages that use the Termux environment's tools: a notice while the Ubuntu chroot runs this phone
+                val termuxOnly = section in TERMUX_ONLY_SECTIONS && !lytso.code.data.preferences.AuthPreferences.currentRemoteMode &&
+                    lytso.code.data.local.chroot.ChrootManager.isActiveNow()
+                when (if (termuxOnly) SettingsSection.TERMUX_ONLY else section) {
+                    SettingsSection.TERMUX_ONLY -> lytso.code.ui.settings.chroot.TermuxOnlyNotice(section.title, cardBg, cardBorder,
+                        note = if (section == SettingsSection.BACKUPS) "The Ubuntu chroot has its own backups: Where agents run → Ubuntu chroot → Manage → Backup & restore." else null) {
+                        currentSection = SettingsSection.SERVERS
+                    }
+                    SettingsSection.UBUNTU_CHROOT -> lytso.code.ui.settings.chroot.ChrootManageScreen(
+                        path = chrootManagePath,
+                        cardBg = cardBg,
+                        cardBorder = cardBorder,
+                        onOpenTerminal = {
+                            onOpenLocalTerminal()
+                            onDismiss()
+                        },
+                        onDeleted = {
+                            chrootManagePath = null
+                            currentSection = SettingsSection.SERVERS
+                        }
+                    )
                     SettingsSection.MAIN -> MainSettingsMenu(
                         themeMode = themeMode,
                         isServerOnline = isServerOnline,
@@ -485,20 +534,26 @@ fun SettingsDialog(
 
                     SettingsSection.APPEARANCE -> AppearanceSubScreen(
                         chatFontScale = chatFontScale,
-                        groupChatsByWorkspace = groupChatsByWorkspace,
                         floatingSwitcherOrientation = floatingSwitcherOrientation,
                         floatingSwitcherItems = floatingSwitcherItems,
                         floatingSwitcherAutoCollapseSec = floatingSwitcherAutoCollapseSec,
                         cardBg = cardBg,
                         cardBorder = cardBorder,
                         onSetChatFontScale = onSetChatFontScale,
-                        onToggleGroupChatsByWorkspace = onToggleGroupChatsByWorkspace,
                         onSetFloatingSwitcherOrientation = onSetFloatingSwitcherOrientation,
+                        floatingSwitcherHandleIcon = floatingSwitcherHandleIcon,
+                        onSetFloatingSwitcherHandleIcon = onSetFloatingSwitcherHandleIcon,
                         onSetFloatingSwitcherItems = onSetFloatingSwitcherItems,
                         onSetFloatingSwitcherAutoCollapseSec = onSetFloatingSwitcherAutoCollapseSec,
                         onResetFloatingSwitcherPosition = onResetFloatingSwitcherPosition,
                         chatHeaderItems = chatHeaderItems,
-                        onSetChatHeaderItems = onSetChatHeaderItems
+                        onSetChatHeaderItems = onSetChatHeaderItems,
+                        groupAgentSteps = groupAgentSteps,
+                        onToggleGroupAgentSteps = onToggleGroupAgentSteps,
+                        groupStepsMin = groupStepsMin,
+                        onSetGroupStepsMin = onSetGroupStepsMin,
+                        showMessageStats = showMessageStats,
+                        onToggleShowMessageStats = onToggleShowMessageStats
                     )
 
                     // a PC in use (Connect to PC): the form would show the PC's values, so it waits for the switch back
@@ -511,7 +566,12 @@ fun SettingsDialog(
                         isBridgeOnline = isBridgeOnline,
                         cardBg = cardBg,
                         cardBorder = cardBorder,
-                        onSaveServerUrls = onSaveServerUrls
+                        onSaveServerUrls = onSaveServerUrls,
+                        onInstallTermux = onInstallLocalTools,
+                        onManageChroot = { path ->
+                            chrootManagePath = path
+                            currentSection = SettingsSection.UBUNTU_CHROOT
+                        }
                     )
 
                     SettingsSection.CONNECT_PC -> lytso.code.ui.pc.ConnectPcScreen(cardBg = cardBg, cardBorder = cardBorder)
@@ -590,7 +650,8 @@ fun SettingsDialog(
                         onInstallLocalTools = onInstallLocalTools,
                         onResetLocalTools = onResetLocalTools,
                         onSaveTerminalPreferences = onSaveTerminalPreferences,
-                        onOpenLocalTerminal = onOpenLocalTerminal
+                        onOpenLocalTerminal = onOpenLocalTerminal,
+                        onOpenRuntime = { currentSection = SettingsSection.SERVERS }
                     )
 
                     SettingsSection.BACKUPS -> BackupsSubScreen(
@@ -706,6 +767,16 @@ fun SettingsDialog(
                     ) {
                         lytso.code.ui.cloud.AgyCloudSettingsCard()
                     }
+                    SettingsSection.AGY_VOICE -> Column(
+                        Modifier.fillMaxSize().bouncyVerticalScroll(rememberScrollState()).padding(16.dp)
+                    ) {
+                        lytso.code.ui.voice.AgyVoiceCallSettingsCard()
+                    }
+                    SettingsSection.HOME_SCREEN -> Column(
+                        Modifier.fillMaxSize().bouncyVerticalScroll(rememberScrollState()).padding(16.dp)
+                    ) {
+                        lytso.code.ui.homescreen.HomeScreenSettingsCard()
+                    }
                     SettingsSection.CLAUDE -> if (claude != null) {
                         lytso.code.ui.claude.ClaudeSettingsGroup(claude, cardBg) { page ->
                             claudePage = page
@@ -803,6 +874,10 @@ fun SettingsDialog(
                         onOpenChangelog = { currentSection = SettingsSection.CHANGELOG }
                     )
                     SettingsSection.CHANGELOG -> ChangelogScreen(
+                        cardBg = cardBg,
+                        cardBorder = cardBorder
+                    )
+                    SettingsSection.UPDATES -> UpdateSettingsScreen(
                         cardBg = cardBg,
                         cardBorder = cardBorder
                     )
@@ -996,7 +1071,8 @@ private fun MainSettingsMenu(
                 title = "Appearance & Display",
                 items = listOf(
                     row(SettingsSection.THEMES, Icons.Outlined.Palette, c.accentPink, currentThemeName, subtitle = "Neon Light, Rainbow AMOLED & gallery"),
-                    row(SettingsSection.APPEARANCE, Icons.Outlined.Tune, c.accentAlt, subtitle = "Font scale, header icons & switcher"),
+                    row(SettingsSection.APPEARANCE, Icons.Outlined.Tune, c.accentAlt, subtitle = "Font scale, step grouping, stats & switcher"),
+                    row(SettingsSection.HOME_SCREEN, Icons.Outlined.Widgets, c.accentTeal, subtitle = "Widgets, shortcuts & scripts"),
                     stemRow
                 )
             ),
@@ -1048,7 +1124,13 @@ private fun MainSettingsMenu(
             SettingsSectionGroup(
                 title = "Workspace & Connectivity",
                 items = listOf(
-                    row(SettingsSection.SERVERS, Icons.Outlined.Dns, c.info, serverValue, serverColor, subtitle = "AGY Hub & IDE Bridge endpoints"),
+                    row(SettingsSection.SERVERS, Icons.Outlined.Dns, c.info,
+                        when {
+                            lytso.code.data.preferences.AuthPreferences.currentRemoteMode -> "Server"
+                            lytso.code.data.local.chroot.ChrootManager.isActiveNow() -> "Ubuntu chroot"
+                            else -> "LytsoCoder"
+                        } + if (serverColor == QuotaGreen) "" else " · $serverValue",
+                        serverColor, subtitle = "Phone runtime (Termux / Ubuntu chroot) & servers"),
                     pcRow,
                     row(SettingsSection.WEBVIEW_EXTENSIONS, Icons.Outlined.Extension, c.accentAlt, subtitle = "Custom plugins, MCP tools & skills"),
                     row(SettingsSection.SLASH_COMMANDS, Icons.Outlined.Bolt, c.warning, subtitle = "Custom / commands & expansions"),
@@ -1066,7 +1148,8 @@ private fun MainSettingsMenu(
                     deviceTools.automation,
                     reaRow,
                     androidDevRow,
-                    row(SettingsSection.TERMUX_SUPPORT, Icons.Outlined.Cable, c.accentIndigo, subtitle = "Termux:API & X11 desktop"),
+                    if (chrootRunsPhone()) rememberX11Row(onNavigate)
+                    else row(SettingsSection.TERMUX_SUPPORT, Icons.Outlined.Cable, c.accentIndigo, subtitle = "Termux:API & X11 desktop"),
                     if (utilityRows(onNavigate).isNotEmpty()) row(SettingsSection.UTILITIES, Icons.Outlined.Handyman, c.accentTeal) else null,
                     row(SettingsSection.DIAGNOSTICS, Icons.Outlined.Speed, c.success,
                         if (isFloatingDiagnosticsEnabled) "HUD on" else null, if (isFloatingDiagnosticsEnabled) QuotaGreen else null,
@@ -1079,6 +1162,7 @@ private fun MainSettingsMenu(
                     if (isLocalToolsInstalled && !lytso.code.data.preferences.AuthPreferences.currentRemoteMode)
                         row(SettingsSection.BACKUPS, Icons.Outlined.Backup, c.info, subtitle = "Rootfs environment & chat histories") else null,
                     row(SettingsSection.DATA_PROTECTION, Icons.Outlined.Security, c.success, subtitle = "Uninstall & clear-data shield"),
+                    row(SettingsSection.UPDATES, Icons.Outlined.SystemUpdateAlt, c.info, subtitle = "App updates & beta channel"),
                     row(SettingsSection.ABOUT, Icons.Outlined.Info, c.accentAlt, "v${BuildConfig.VERSION_NAME}", subtitle = "Version, changelog & bridge export")
                 )
             )
@@ -1117,13 +1201,16 @@ private fun AntigravitySettingsMenu(
         else -> "Not installed" to c.warning
     }
     val cloudOn by lytso.code.data.agent.agy.AgyCloud.enabled.collectAsState()
+    val voiceBubbleOn by lytso.code.data.voice.AgyVoicePreferences.bubble.collectAsState()
     SettingsRowList(
         cardBg = cardBg,
         groups = listOf(
             listOf(
                 SettingsRowItem(Icons.Outlined.Terminal, GeminiBlue, SettingsSection.AGY_CLI.title, cliValue, cliColor) { onNavigate(SettingsSection.AGY_CLI) },
                 SettingsRowItem(Icons.Outlined.Cloud, GeminiBlue, SettingsSection.AGY_CLOUD.title,
-                    if (cloudOn) "On" else "Off", if (cloudOn) QuotaGreen else null) { onNavigate(SettingsSection.AGY_CLOUD) }
+                    if (cloudOn) "On" else "Off", if (cloudOn) QuotaGreen else null) { onNavigate(SettingsSection.AGY_CLOUD) },
+                SettingsRowItem(Icons.Outlined.HeadsetMic, GeminiBlue, SettingsSection.AGY_VOICE.title,
+                    if (voiceBubbleOn) "Floating on" else null, if (voiceBubbleOn) QuotaGreen else null) { onNavigate(SettingsSection.AGY_VOICE) }
             ),
             listOf(
                 SettingsRowItem(Icons.Outlined.Hub, GeminiBlue, SettingsSection.MCP.title, mcpValue, mcpColor) { onNavigate(SettingsSection.MCP) },
@@ -1165,6 +1252,22 @@ private fun TermuxSupportMenu(
             )
         )
     )
+}
+
+/** The X11 Desktop row of the main settings page (Ubuntu chroot mode), with whether the X server runs. */
+@Composable
+private fun rememberX11Row(onNavigate: (SettingsSection) -> Unit): SettingsRowItem {
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        lytso.code.data.x11.X11DesktopManager.init(context)
+        lytso.code.data.x11.X11DesktopManager.refresh()
+    }
+    val x11 by lytso.code.data.x11.X11DesktopManager.state.collectAsState()
+    val c = lytso.code.theme.AppColors
+    return SettingsRowItem(Icons.Outlined.DesktopWindows, c.accentIndigo, SettingsSection.X11_DESKTOP.title,
+        if (x11.running) "Running" else null, if (x11.running) QuotaGreen else null) {
+        onNavigate(SettingsSection.X11_DESKTOP)
+    }
 }
 
 /** What Settings → Utilities lists. Empty for now: when it is, the Utilities row is hidden. Add future handy tools here. */
@@ -1256,10 +1359,15 @@ private fun rememberDeviceToolRows(onNavigate: (SettingsSection) -> Unit): Devic
     val context = LocalContext.current
     LaunchedEffect(Unit) {
         lytso.code.data.adb.AdbConnectManager.init(context)
+        lytso.code.data.adb.DeviceAccess.init(context)
         lytso.code.data.adb.AdbConnectManager.refresh()
+        lytso.code.data.adb.ShizukuShell.refresh()
     }
     val adb by lytso.code.data.adb.AdbConnectManager.state.collectAsState()
     val connected = adb.connectedDevice
+    val accessMode by lytso.code.data.adb.DeviceAccess.mode.collectAsState()
+    val shizuku by lytso.code.data.adb.ShizukuShell.status.collectAsState()
+    val root by lytso.code.data.adb.RootShell.state.collectAsState()
     var automationAllowed by remember { mutableStateOf(lytso.code.data.automation.AndroidAutomation.isServiceRunning()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -1271,12 +1379,23 @@ private fun rememberDeviceToolRows(onNavigate: (SettingsSection) -> Unit): Devic
     return DeviceToolRows(
         adb = SettingsRowItem(
             Icons.Outlined.PhonelinkSetup, c.accentTeal, SettingsSection.ADB_CONNECT.title,
-            when {
-                connected != null -> "Connected"
-                adb.adbInstalled == false -> "Not installed"
-                else -> null
+            when (accessMode) {
+                lytso.code.data.adb.DeviceAccess.Mode.ADB -> when {
+                    connected != null -> "Connected"
+                    adb.adbInstalled == false -> "Not installed"
+                    else -> null
+                }
+                lytso.code.data.adb.DeviceAccess.Mode.SHIZUKU -> if (shizuku.ready) "Shizuku" else "Shizuku · not ready"
+                lytso.code.data.adb.DeviceAccess.Mode.ROOT ->
+                    if (root.check == lytso.code.data.adb.RootShell.Check.GRANTED) "Root" else "Root · not granted"
             },
-            if (connected != null) QuotaGreen else if (adb.adbInstalled == false) c.warning else null
+            when (accessMode) {
+                lytso.code.data.adb.DeviceAccess.Mode.ADB ->
+                    if (connected != null) QuotaGreen else if (adb.adbInstalled == false) c.warning else null
+                lytso.code.data.adb.DeviceAccess.Mode.SHIZUKU -> if (shizuku.ready) QuotaGreen else c.warning
+                lytso.code.data.adb.DeviceAccess.Mode.ROOT ->
+                    if (root.check == lytso.code.data.adb.RootShell.Check.GRANTED) QuotaGreen else c.warning
+            }
         ) { onNavigate(SettingsSection.ADB_CONNECT) },
         automation = SettingsRowItem(
             Icons.Outlined.TouchApp, c.accentAlt, SettingsSection.ANDROID_AUTOMATION.title,
@@ -1556,20 +1675,26 @@ private fun ThemesSubScreen(
 @Composable
 private fun AppearanceSubScreen(
     chatFontScale: Float,
-    groupChatsByWorkspace: Boolean,
     floatingSwitcherOrientation: String,
     floatingSwitcherItems: List<String>,
     floatingSwitcherAutoCollapseSec: Int,
     cardBg: Color,
     cardBorder: BorderStroke,
     onSetChatFontScale: (Float) -> Unit,
-    onToggleGroupChatsByWorkspace: (Boolean) -> Unit,
     onSetFloatingSwitcherOrientation: (String) -> Unit,
+    floatingSwitcherHandleIcon: String,
+    onSetFloatingSwitcherHandleIcon: (String) -> Unit,
     onSetFloatingSwitcherItems: (List<String>) -> Unit,
     onSetFloatingSwitcherAutoCollapseSec: (Int) -> Unit,
     onResetFloatingSwitcherPosition: () -> Unit,
     chatHeaderItems: List<String>,
-    onSetChatHeaderItems: (List<String>) -> Unit
+    onSetChatHeaderItems: (List<String>) -> Unit,
+    groupAgentSteps: Boolean,
+    onToggleGroupAgentSteps: (Boolean) -> Unit,
+    groupStepsMin: Int,
+    onSetGroupStepsMin: (Int) -> Unit,
+    showMessageStats: Boolean,
+    onToggleShowMessageStats: (Boolean) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -1731,7 +1856,85 @@ private fun AppearanceSubScreen(
             }
         }
 
-        // Group Chats By Workspace Switch
+        // Group Agent Steps Switch: runs of a reply's thinking and tool calls fold into one progress pill
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = cardBg,
+            border = cardBorder,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = "Group Agent Steps",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Runs of thinking and tool calls in a row fold into one pill that shows the progress; tap it to see the steps. Off: every step is its own tile.",
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                    Switch(
+                        checked = groupAgentSteps,
+                        onCheckedChange = onToggleGroupAgentSteps,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = ClaudeTerracotta
+                        )
+                    )
+                }
+                // Fold after: how many steps in a row fold into a pill (1+ = every run, even a single step)
+                if (groupAgentSteps) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Fold after (steps in a row)",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        (1..6).forEach { n ->
+                            val isSelected = groupStepsMin == n
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onSetGroupStepsMin(n) },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f))
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "$n+",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Message Stats Switch: the token, cache and time stats under each reply
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = cardBg,
@@ -1747,21 +1950,21 @@ private fun AppearanceSubScreen(
             ) {
                 Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                     Text(
-                        text = "Group Chats by Workspace",
+                        text = "Show Message Stats",
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Categorize chat history in drawer under workspace folders matching repository paths",
+                        text = "Token counts, cache percentage and time under each reply (tap them for the details)",
                         fontSize = 11.5.sp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
                 Switch(
-                    checked = groupChatsByWorkspace,
-                    onCheckedChange = onToggleGroupChatsByWorkspace,
+                    checked = showMessageStats,
+                    onCheckedChange = onToggleShowMessageStats,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                         checkedTrackColor = ClaudeTerracotta
@@ -1805,108 +2008,177 @@ private fun AppearanceSubScreen(
                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Layout Orientation Selector
-                Text(
-                    text = "Layout Orientation",
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val isVert = floatingSwitcherOrientation.equals("VERTICAL", ignoreCase = true)
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onSetFloatingSwitcherOrientation("VERTICAL") },
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (isVert) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, if (isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(Icons.Outlined.ExpandLess, contentDescription = null, tint = if (isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Vertical", fontSize = 12.sp, fontWeight = if (isVert) FontWeight.Bold else FontWeight.Normal, color = if (isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface)
-                        }
-                    }
-
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onSetFloatingSwitcherOrientation("HORIZONTAL") },
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (!isVert) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, if (!isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = if (!isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Horizontal", fontSize = 12.sp, fontWeight = if (!isVert) FontWeight.Bold else FontWeight.Normal, color = if (!isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface)
-                        }
-                    }
-                }
+                // The page overview (on/off, which pill opens it, its layout) and the pills' size
+                SwitcherOverviewOptions(handleIcon = floatingSwitcherHandleIcon)
+                // The icon panel's own options only while the switcher pill has one (not when its tap opens the overview)
+                val iconPanelInUse = rememberPageOverviewMode() != "SWITCHER"
 
                 Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Auto-Collapse Timeout Selector
+                if (iconPanelInUse) {
+                    // Layout Orientation Selector
+                    Text(
+                        text = "Layout Orientation",
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val isVert = floatingSwitcherOrientation.equals("VERTICAL", ignoreCase = true)
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onSetFloatingSwitcherOrientation("VERTICAL") },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isVert) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, if (isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(Icons.Outlined.ExpandLess, contentDescription = null, tint = if (isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Vertical", fontSize = 12.sp, fontWeight = if (isVert) FontWeight.Bold else FontWeight.Normal, color = if (isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onSetFloatingSwitcherOrientation("HORIZONTAL") },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (!isVert) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, if (!isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = if (!isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Horizontal", fontSize = 12.sp, fontWeight = if (!isVert) FontWeight.Bold else FontWeight.Normal, color = if (!isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
+
+                // Collapsed Pill Icon Selector
                 Text(
-                    text = "Auto-Collapse Timeout",
+                    text = "Collapsed Icon",
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Automatically collapses into a small arrow handle after inactivity",
+                    text = "The icon on the small handle when the switcher is collapsed",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                val timeouts = listOf(0 to "Never", 3 to "3s", 5 to "5s", 10 to "10s", 15 to "15s")
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    timeouts.forEach { (sec, label) ->
-                        val isSelected = floatingSwitcherAutoCollapseSec == sec
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { onSetFloatingSwitcherAutoCollapseSec(sec) },
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(1.dp, if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f))
-                        ) {
-                            Box(
-                                modifier = Modifier.padding(vertical = 6.dp),
-                                contentAlignment = Alignment.Center
+                val handleIcons = lytso.code.ui.components.FloatingSwitcherHandleIcons
+                // an unknown saved id shows the default icon, so mark that one
+                val selectedHandleIcon = handleIcons.firstOrNull { it.first == floatingSwitcherHandleIcon }?.first
+                    ?: handleIcons.first().first
+                handleIcons.chunked(4).forEach { rowIcons ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        rowIcons.forEach { (iconId, icon) ->
+                            val isSelected = iconId == selectedHandleIcon
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { onSetFloatingSwitcherHandleIcon(iconId) },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                             ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 10.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = iconId.replaceFirstChar { it.uppercase() },
+                                        tint = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
+
+                if (iconPanelInUse) {
+                    // Auto-Collapse Timeout Selector
+                    Text(
+                        text = "Auto-Collapse Timeout",
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Automatically collapses into a small handle after inactivity",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    val timeouts = listOf(0 to "Never", 3 to "3s", 5 to "5s", 10 to "10s", 15 to "15s")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        timeouts.forEach { (sec, label) ->
+                            val isSelected = floatingSwitcherAutoCollapseSec == sec
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onSetFloatingSwitcherAutoCollapseSec(sec) },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f))
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
 
                 // Customize Items Order & Visibility
                 Text(
@@ -3922,17 +4194,13 @@ private fun TerminalSubScreen(
     onInstallLocalTools: () -> Unit,
     onResetLocalTools: () -> Unit,
     onSaveTerminalPreferences: (Int, String, Int, String) -> Unit,
-    onOpenLocalTerminal: () -> Unit
+    onOpenLocalTerminal: () -> Unit,
+    /** Where agents run (the phone's runtime: install, switch, delete). */
+    onOpenRuntime: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val remoteMode = lytso.code.data.preferences.AuthPreferences.currentRemoteMode
     val coroutineScope = rememberCoroutineScope()
-    var showResetWarningDialog by remember { mutableStateOf(false) }
-    var showResetPasswordDialog by remember { mutableStateOf(false) }
-    var resetPasswordInput by remember { mutableStateOf("") }
-    var showShutdownCountdownDialog by remember { mutableStateOf(false) }
-    var countdownSeconds by remember { mutableIntStateOf(5) }
-
     var hostState by remember { mutableStateOf(sshHost) }
     var portState by remember { mutableStateOf(sshPort.toString()) }
     var userState by remember { mutableStateOf(sshUser) }
@@ -3945,6 +4213,13 @@ private fun TerminalSubScreen(
     var cursorStyleState by remember { mutableStateOf(terminalCursorStyle) }
     var bufferSizeState by remember { mutableIntStateOf(terminalBufferSize) }
     var themeState by remember { mutableStateOf(terminalTheme) }
+    val terminalPrefs = remember(context) { lytso.code.data.preferences.AuthPreferences(context) }
+    val sessionPillEnabled by terminalPrefs.terminalSessionPillEnabled
+        .collectAsState(initial = terminalPrefs.getTerminalSessionPillEnabledSync())
+    val drawerSwipeArea by terminalPrefs.terminalDrawerSwipeArea
+        .collectAsState(initial = terminalPrefs.getTerminalDrawerSwipeAreaSync())
+    val charBasedInput by terminalPrefs.terminalCharBasedInput
+        .collectAsState(initial = terminalPrefs.getTerminalCharBasedInputSync())
 
 
     Column(
@@ -4148,33 +4423,15 @@ private fun TerminalSubScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Save SSH Settings", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
-                } else {
-                    // Local tools mode details
-                    Spacer(modifier = Modifier.height(14.dp))
-                    HorizontalDivider(thickness = 0.6.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Column {
-                            Text("Embedded Linux Rootfs", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                            Text(text = if (isLocalToolsInstalled) "Installed and ready" else "Not installed (>30MB download)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = if (isLocalToolsInstalled) QuotaGreen.copy(alpha = 0.15f) else ClaudeTerracotta.copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = if (isLocalToolsInstalled) "Installed ✓" else "Not Installed",
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isLocalToolsInstalled) QuotaGreen else ClaudeTerracotta,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-
+                } else if (!remoteMode) {
                     Spacer(modifier = Modifier.height(10.dp))
-
+                    Text(
+                        text = "Terminal tabs open a shell where the agents run on this phone: LytsoCoder's built-in environment or the Ubuntu chroot, chosen (and installed or deleted) in Where agents run.",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    TextButton(onClick = onOpenRuntime) { Text("Where agents run", color = ClaudeTerracotta) }
+                    Spacer(modifier = Modifier.height(6.dp))
                     Row(modifier = Modifier.fillMaxWidth()) {
                         if (isLocalToolsInstalled) {
                             OutlinedButton(
@@ -4298,6 +4555,89 @@ private fun TerminalSubScreen(
                         }
                     }
                 }
+
+                // Floating session pill on/off
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text("Floating Session Pill", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "The session name at the top right of the terminal, to switch and close sessions. Off: a plain terminal like Termux; swipe right from the left edge for the sessions drawer.",
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                    Switch(
+                        checked = sessionPillEnabled,
+                        onCheckedChange = { enabled -> coroutineScope.launch { terminalPrefs.saveTerminalSessionPillEnabled(enabled) } },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = ClaudeTerracotta
+                        )
+                    )
+                }
+
+                // Where on the left edge the drawer swipe beats gesture navigation's Back
+                Column {
+                    Text("Drawer Swipe Area", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "With gesture navigation, a swipe from the left edge is Back. Android lets an app keep only part of the edge (200dp) for itself: in that part, marked by a small line on the edge, the swipe always opens the sessions drawer.",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf("TOP" to "Top", "MIDDLE" to "Middle", "BOTTOM" to "Bottom").forEach { (area, label) ->
+                            val isSel = drawerSwipeArea.equals(area, ignoreCase = true)
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { coroutineScope.launch { terminalPrefs.saveTerminalDrawerSwipeArea(area) } },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSel) ClaudeTerracotta else MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, if (isSel) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                            ) {
+                                Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                                    Text(text = label, fontSize = 11.5.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium, color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurface)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Keyboard input mode: text mode (keyboard toolbar + clipboard) or key presses only (TYPE_NULL)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text("Character-Based Input", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "For keyboards that misbehave in the terminal (letters doubled or lost, autocorrect). On: the keyboard sends single key presses only, like Termux; its toolbar and clipboard are hidden, so paste with a long press. Off: the keyboard's clipboard works.",
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                    Switch(
+                        checked = charBasedInput,
+                        onCheckedChange = { enabled -> coroutineScope.launch { terminalPrefs.saveTerminalCharBasedInput(enabled) } },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = ClaudeTerracotta
+                        )
+                    )
+                }
             }
         }
 
@@ -4311,6 +4651,26 @@ private fun TerminalSubScreen(
             Icon(imageVector = Icons.Default.Terminal, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text("Launch Terminal Now", fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/**
+ * "Delete all app data": a warning, the typed confirmation, a countdown, then Android wipes LytsoCoder's data (the app
+ * closes). [show] opens it; [onShown] resets the caller's flag.
+ */
+@Composable
+internal fun FactoryResetDialogs(show: Boolean, onShown: () -> Unit) {
+    val context = LocalContext.current
+    var showResetWarningDialog by remember { mutableStateOf(false) }
+    var showResetPasswordDialog by remember { mutableStateOf(false) }
+    var resetPasswordInput by remember { mutableStateOf("") }
+    var showShutdownCountdownDialog by remember { mutableStateOf(false) }
+    var countdownSeconds by remember { mutableIntStateOf(5) }
+    LaunchedEffect(show) {
+        if (show) {
+            showResetWarningDialog = true
+            onShown()
         }
     }
 

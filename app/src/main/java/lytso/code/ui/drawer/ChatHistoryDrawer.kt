@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.outlined.Login
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.AppShortcut
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Unarchive
 import androidx.compose.material.icons.outlined.PushPin
@@ -157,6 +158,12 @@ fun ChatHistoryDrawer(
         isInitialGracePeriod = false
     }
     val context = LocalContext.current
+    // the Ubuntu chroot in use: the Exit dialog asks whether it stops too (preset from its exit setting)
+    val chrootInUse = remember(showExitConfirmDialog) { lytso.code.data.local.chroot.ChrootManager.isActiveNow() }
+    var stopChrootOnExit by remember(showExitConfirmDialog) {
+        mutableStateOf(lytso.code.data.local.chroot.ChrootManager.isActiveNow() &&
+            lytso.code.data.local.chroot.ChrootManager.exitBehavior(context) != lytso.code.data.local.chroot.ChrootExitBehavior.KEEP_RUNNING)
+    }
     // pinned chats (app level, by conversation id) sit at the top of the list
     remember { lytso.code.data.preferences.PinnedChats.init(context) }
     val pinnedIds by lytso.code.data.preferences.PinnedChats.ids.collectAsState()
@@ -492,17 +499,43 @@ fun ChatHistoryDrawer(
                 )
             },
             text = {
-                Text(
-                    text = "Do you want to exit the app? This will stop all active background services, servers, and terminals.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 20.sp
-                )
+                Column {
+                    Text(
+                        text = if (chrootInUse) "Do you want to exit the app? Its background services and terminals stop."
+                        else "Do you want to exit the app? This will stop all active background services, servers, and terminals.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 20.sp
+                    )
+                    // the Ubuntu chroot runs outside the app: keep it working, or stop it too (this exit only)
+                    if (chrootInUse) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 8.dp).clickable { stopChrootOnExit = !stopChrootOnExit }
+                        ) {
+                            Checkbox(checked = stopChrootOnExit, onCheckedChange = { stopChrootOnExit = it })
+                            Text(
+                                if (stopChrootOnExit) "Also stop the Ubuntu chroot (its bridge and agents)"
+                                else "Also stop the Ubuntu chroot (off: agents keep working while LytsoCoder is closed)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         showExitConfirmDialog = false
+                        if (chrootInUse) {
+                            val saved = lytso.code.data.local.chroot.ChrootManager.exitBehavior(context)
+                            lytso.code.data.local.chroot.ChrootManager.exitOverride = when {
+                                !stopChrootOnExit -> lytso.code.data.local.chroot.ChrootExitBehavior.KEEP_RUNNING
+                                saved != lytso.code.data.local.chroot.ChrootExitBehavior.KEEP_RUNNING -> saved
+                                else -> lytso.code.data.local.chroot.ChrootExitBehavior.STOP_ALL
+                            }
+                        }
                         try {
                             lytso.code.data.service.LytsoCoderService.stop(context)
                         } catch (e: Exception) {
@@ -1836,6 +1869,24 @@ private fun ChatHistoryItemRow(
                             menuExpanded = false
                             onTogglePin()
                             AppToastHelper.showToast(if (isPinned) "Chat unpinned" else "Chat pinned", ChatToastType.SUCCESS)
+                        }
+                    )
+                }
+                if (!conv.readOnly && conv.parentConversationId == null) {
+                    // an icon on the home screen that opens this chat (Settings → Home screen has widgets too)
+                    DropdownMenuItem(
+                        text = { Text("Add to home screen", fontSize = 13.5.sp) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.AppShortcut,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            lytso.code.data.homescreen.HomeShortcuts.pinChat(context, conv.id, conv.agent, conv.title)
                         }
                     )
                 }

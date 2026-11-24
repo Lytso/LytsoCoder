@@ -189,7 +189,7 @@ class AgyPluginService(
                     val isAndroidTermux = java.io.File("/data/data/${lytso.code.BuildConfig.APPLICATION_ID}/files/usr/lib/libtermux-exec.so").exists() ||
                                           System.getenv("PREFIX") != null ||
                                           (System.getProperty("java.vendor")?.contains("Android", ignoreCase = true) == true)
-                    if (isAndroidTermux && !AuthPreferences.currentRemoteMode) {
+                    if (isAndroidTermux && !AuthPreferences.currentRemoteMode && !lytso.code.data.local.chroot.ChrootManager.isActiveNow()) {
                         if (!envMap.containsKey("LD_PRELOAD") && java.io.File("/data/data/${lytso.code.BuildConfig.APPLICATION_ID}/files/usr/lib/libtermux-exec.so").exists()) {
                             envMap["LD_PRELOAD"] = "/data/data/${lytso.code.BuildConfig.APPLICATION_ID}/files/usr/lib/libtermux-exec.so"
                         }

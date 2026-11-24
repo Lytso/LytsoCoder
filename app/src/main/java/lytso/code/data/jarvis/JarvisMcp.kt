@@ -1079,7 +1079,7 @@ object JarvisMcp {
     private fun openSettings(args: JSONObject): JSONObject {
         val want = args.optString("section").trim().lowercase().replace(' ', '_')
         val all = lytso.code.ui.settings.SettingsSection.values()
-            .filter { it != lytso.code.ui.settings.SettingsSection.CLAUDE_PAGE }
+            .filter { it != lytso.code.ui.settings.SettingsSection.CLAUDE_PAGE && it != lytso.code.ui.settings.SettingsSection.TERMUX_ONLY }
         val s = all.firstOrNull { it.name.lowercase() == want }
             ?: all.firstOrNull { it.title.lowercase().contains(want.replace('_', ' ')) }
             ?: all.firstOrNull { it.name.lowercase().contains(want) || want.contains(it.name.lowercase()) }
@@ -1440,6 +1440,9 @@ object JarvisMcp {
                 v.trim().removeSuffix("x").toFloatOrNull()?.let { vm.setChatFontScale(it.coerceIn(0.8f, 1.6f)); null } ?: "Not a number."
             }),
             bool("group_chats_by_workspace", "Group the chat list by project", false, { vm.groupChatsByWorkspace.value }, { vm.setGroupChatsByWorkspace(it) }),
+            bool("group_agent_steps", "Fold runs of agent thinking and tool calls into one progress pill (off: every step is its own tile)", false, { vm.groupAgentSteps.value }, { vm.setGroupAgentSteps(it) }),
+            int("group_steps_min", "With group_agent_steps on: fold a run of agent thinking and tool calls once it has at least this many steps (1 = every run)", false, 1..10, { vm.groupStepsMin.value }, { vm.setGroupStepsMin(it) }),
+            bool("show_message_stats", "Token, cache and time stats under each reply", false, { vm.showMessageStats.value }, { vm.setShowMessageStats(it) }),
             bool("floating_bubble", "Floating chat bubble over other apps", false, { vm.isFloatingBubbleEnabled.value }, { vm.setFloatingBubbleEnabled(it) }),
             bool("vibrate_when_chat_done", "A light buzz when a chat finishes", false, { ChatCompletionMonitor.vibrate.value }, { ChatCompletionMonitor.setVibrate(it) }),
             Setting("new_chat_agent", "Agent of new chats", "claude|agy|opencode|codex", false, get = { vm.newChatAgent.value.name.lowercase() }, set = { v ->

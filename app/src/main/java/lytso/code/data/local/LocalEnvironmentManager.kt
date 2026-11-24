@@ -190,7 +190,16 @@ object LocalEnvironmentManager {
     fun getTmpDir(context: Context): File = File(getPrefixDir(context), "tmp")
     fun getHomeDir(context: Context): File = File(context.filesDir, "home")
     fun getProjectsDir(context: Context): File = File(getHomeDir(context), "projects")
+    /** The phone's runtime is installed: the Ubuntu chroot when it is the chosen one, else the Termux environment. */
     fun isInstalled(context: Context): Boolean {
+        if (AuthPreferences(context).isChrootModeSync()) {
+            return lytso.code.data.local.chroot.ChrootManager.activeInstall(context) != null
+        }
+        return isTermuxInstalled(context)
+    }
+
+    /** The Termux environment (bootstrap / rootfs in the app's files) is installed, whichever runtime is chosen. */
+    fun isTermuxInstalled(context: Context): Boolean {
         val binDir = getBinDir(context)
         val homeDir = getHomeDir(context)
         return (binDir.exists() && binDir.isDirectory && (File(binDir, "sh").exists() || File(binDir, "dash").exists() || File(binDir, "bash").exists() || File(binDir, "busybox").exists())) &&
@@ -212,6 +221,29 @@ object LocalEnvironmentManager {
     fun getClaudeWrapperFile(context: Context): File = File(getBinDir(context), "claude")
 
     /**
+     * zsh (the terminal's shell) shows zero-width marks, like the Bangla hasanta U+09CD, as "<09cd>" unless its
+     * COMBINING_CHARS option is on; bash and the terminal itself draw them fine. zsh has no environment variable for
+     * its options, so this adds `setopt COMBINING_CHARS` to the global `$PREFIX/etc/zshenv`: read by every zsh before the
+     * user's own files (which can still turn it off), and owned by no package, so updates leave it alone. Called when a
+     * terminal opens; adds the marked block once, keeping anything else in the file.
+     */
+    fun ensureZshDefaults(context: Context) {
+        try {
+            val etc = File(getPrefixDir(context), "etc")
+            if (!File(getBinDir(context), "zsh").exists() || !etc.isDirectory) return
+            val zshenv = File(etc, "zshenv")
+            val marker = "# LytsoCoder: combining characters"
+            val existing = if (zshenv.exists()) zshenv.readText() else ""
+            if (existing.contains(marker)) return
+            val block = "$marker (marks like the Bangla hasanta drawn on their letter, not as <09cd>)\n" +
+                "setopt COMBINING_CHARS\n"
+            zshenv.writeText(if (existing.isBlank()) block else existing.trimEnd('\n') + "\n\n" + block)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not write the zsh defaults", e)
+        }
+    }
+
+    /**
      * Writes the Claude Code launcher. The official binary is built for glibc, so it runs through the bundled glibc
      * loader. Claude's own installer and updater only manage `~/.local/share/claude/versions/<version>` and the
      * `~/.local/bin/claude` link, never `$PREFIX/bin`, so updates cannot break this launcher: it always starts the
@@ -219,6 +251,8 @@ object LocalEnvironmentManager {
      * an update replaced it. Called on every server start and new terminal; only rewrites what changed.
      */
     fun ensureClaudeWrapper(context: Context) {
+        val authPrefs = AuthPreferences(context)
+        if (authPrefs.isChrootModeSync()) return
         try {
             val prefix = getPrefixDir(context).absolutePath
             val home = getHomeDir(context).absolutePath
@@ -1498,7 +1532,18 @@ object LocalEnvironmentManager {
                 return@withContext false
             }
 
-            // Save installation state in preferences
+            // Save installation state in preferences; the environment just installed becomes the phone's runtime
+            // (an Ubuntu chroot stays installed and can be chosen again in Settings → Where agents run).
+            // Coming from the chroot: its bridge outlives the app, so it is stopped (and its terminals closed) first
+            val wasChroot = authPreferences.isChrootModeSync()
+            if (wasChroot) {
+                log("Stopping the Ubuntu chroot's bridge: the agents move to LytsoCoder's built-in environment…")
+                runCatching { LocalServerManager.stopServerCompletely() }
+                runCatching { lytso.code.data.local.chroot.ChrootManager.stopBridge(appContext) }
+                runCatching { LocalTerminalManager.closeAll() }
+            }
+            authPreferences.setEnvironmentType(lytso.code.data.local.chroot.ChrootManager.ENV_TERMUX)
+            authPreferences.applyLocalRuntimeUrls(chroot = false)
             authPreferences.setLocalToolsInstalled(true, BOOTSTRAP_VERSION)
             authPreferences.setLocalToolsEnabled(true)
             authPreferences.setTerminalToolEnabled(true)
@@ -1510,7 +1555,11 @@ object LocalEnvironmentManager {
             )
             updateInstallNotification(appContext, "Installation Complete", "Termux Linux environment is verified and ready!", 100, ongoing = false, force = true)
             log("✅ Local environment ready and verified! Total space: ${getFormattedDiskSpace(appContext)}")
-            LocalTerminalManager.autoLaunchServerIfReady(appContext)
+            if (wasChroot && lytso.code.data.agent.AgentPreferences.hasChosenSync(appContext)) {
+                LocalServerManager.startServer(appContext, forceRestart = true)
+            } else {
+                LocalTerminalManager.autoLaunchServerIfReady(appContext)
+            }
             return@withContext true
 
         } catch (e: Exception) {
@@ -1712,6 +1761,8 @@ object LocalEnvironmentManager {
     }
 
     fun ensureGlibcEnvironment(context: Context): Boolean {
+        val authPrefs = AuthPreferences(context)
+        if (authPrefs.isChrootModeSync()) return true
         val prefixDir = getPrefixDir(context)
         val glibcDir = File(prefixDir, "glibc")
         val glibcLib = File(glibcDir, "lib")
@@ -2280,6 +2331,10 @@ All files created here persist inside the application.
         Log.d(TAG, "[Reset] Triggering Android OS application data wipe...")
         try {
             LocalServerManager.forceKillAll()
+        } catch (_: Exception) {}
+        // nothing of an Ubuntu chroot may run (or stay mounted) while Android deletes the app's data
+        try {
+            lytso.code.data.local.chroot.ChrootManager.stopAllBlocking(context)
         } catch (_: Exception) {}
 
         try {

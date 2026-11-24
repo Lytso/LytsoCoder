@@ -154,7 +154,7 @@ fun AndroidDevScreen(
 
         // Check
         DevInfoCard("Check the tools", cardBg, cardBorder) {
-            Hint("Prints the version of every tool in the container: Java, the SDK platforms, aapt2, adb, Node.js, Flutter, CMake.")
+            Hint("Prints the version of every tool in Ubuntu: Java, the SDK platforms, aapt2, adb, Node.js, Flutter, CMake.")
             OutlinedButton(enabled = !busy && Component.CONTAINER in state.installed && state.filesReady, onClick = AndroidDevManager::runDoctor) {
                 Icon(Icons.Outlined.HealthAndSafety, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Check")
             }
@@ -172,7 +172,8 @@ fun AndroidDevScreen(
             "clean-cache" -> Triple("Delete Gradle's caches?", "Frees the space Gradle's downloads use. The next build of every project downloads them again (slow).", { AndroidDevManager.cleanCache() })
             else -> Triple(
                 "Remove the Android tools?",
-                "Deletes the Android SDK, Flutter, Gradle's files and the adev commands. The Ubuntu container, Java, Node.js (REA uses them) and your projects stay.",
+                if (state.chroot) "Deletes the Android SDK, Flutter, Gradle's files and the adev commands. Java, Node.js, adb and fastboot (REA uses them) and your projects stay in the Ubuntu chroot."
+                else "Deletes the Android SDK, Flutter, Gradle's files and the adev commands. The Ubuntu container, Java, Node.js (REA uses them) and your projects stay.",
                 { AndroidDevManager.uninstall() }
             )
         }
@@ -202,7 +203,8 @@ private fun IntroCard(state: AndroidDevManager.State, cardBg: Color, cardBorder:
                     else -> Pill("Not set up", MaterialTheme.colorScheme.primary)
                 }
             }
-            Hint("Let agents (and you) create, build and install Android apps right here: Kotlin or Java with Jetpack Compose, Flutter, and React Native. Gradle, the Android SDK and Flutter run in an Ubuntu container (proot-distro) inside the terminal, the same container REA uses.")
+            Hint("Let agents (and you) create, build and install Android apps right here: Kotlin or Java with Jetpack Compose, Flutter, and React Native. Gradle, the Android SDK and Flutter run " +
+                if (state.chroot) "in this phone's Ubuntu chroot, like REA." else "in an Ubuntu container (proot-distro) inside the terminal, the same container REA uses.")
             Hint("Install only what you need: Kotlin / Java first (the others build on it), then Flutter or React Native.")
         }
     }
@@ -256,7 +258,7 @@ private fun InstallStep(state: AndroidDevManager.State, cardBg: Color, cardBorde
     ) {
         Hint("Pick what you want to build. Everything it needs is installed for you, one part after another.")
         val facts = listOfNotNull(
-            state.containerName?.let { "Container: $it" },
+            state.containerName?.let { if (state.chroot) "Ubuntu chroot: $it" else "Container: $it" },
             state.platforms.takeIf { it.isNotEmpty() }?.let { "SDK platforms: ${it.joinToString()}" },
             state.flutterVersion?.let { "Flutter $it" },
             state.nodeVersion?.let { "Node.js $it" }
@@ -338,7 +340,7 @@ private fun PartRow(c: Component, state: AndroidDevManager.State, checked: Boole
                 Column(Modifier.weight(1f)) {
                     Text(c.label, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
                     Text(
-                        c.size + when {
+                        if (state.chroot && c == Component.CONTAINER) "this phone's runtime" else c.size + when {
                             running -> " · installing…"
                             installed -> " · installed"
                             else -> ""
@@ -349,7 +351,8 @@ private fun PartRow(c: Component, state: AndroidDevManager.State, checked: Boole
                 }
                 if (running) {
                     CircularProgressIndicator(Modifier.padding(end = 12.dp).size(18.dp), strokeWidth = 2.dp)
-                } else {
+                } else if (!(state.chroot && c == Component.CONTAINER)) {
+                    // the Ubuntu chroot is the phone's runtime: nothing to install or reinstall here
                     TextButton(enabled = !busy, onClick = { AndroidDevManager.install(c) }) {
                         Text(if (installed) (if (c == Component.FLUTTER) "Update" else "Reinstall") else "Install", fontSize = 12.5.sp)
                     }
@@ -431,7 +434,7 @@ private fun UseGuide(state: AndroidDevManager.State) {
     if (Component.LAUNCHER !in state.installed) Hint("Install Kotlin / Java above first.")
     DevCopyLine("adev-new compose ~/${AndroidDevManager.PROJECTS_DIR}/my-app", mono = true)
     DevCopyLine("cd ~/${AndroidDevManager.PROJECTS_DIR}/my-app && adev ./gradlew assembleDebug", mono = true)
-    Hint("adev runs a command in the container with Java, the SDK, Gradle, Flutter and Node.js on PATH, in the current folder. adev-new also makes Flutter (flutter) and React Native (rn) projects. Keep projects in the Termux home, not on shared storage.")
+    Hint("adev runs a command with Java, the SDK, Gradle, Flutter and Node.js on PATH (in the Ubuntu container or chroot), in the current folder. adev-new also makes Flutter (flutter) and React Native (rn) projects. Keep projects in the Termux home, not on shared storage.")
     Text("Try in chat", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     listOf(
         "Create a Jetpack Compose app called Notes in ~/AndroidProjects/notes with a list and an add button, build it and give me the APK.",
@@ -467,7 +470,14 @@ private fun TerminalCard(state: AndroidDevManager.State, cardBg: Color, cardBord
     val repo = runCatching { lytso.code.ui.browser.PluginRepositories.parse(state.source) }.getOrNull()
     val raw = "https://raw.githubusercontent.com/${repo?.slug ?: "Lytso/lytsocoder-plugins"}/${repo?.ref?.ifBlank { "main" } ?: "main"}/android-dev/skills/android-dev/scripts"
     val s = "\$PREFIX/share/lytsocoder-android/android-setup.sh"
-    val steps = listOf(
+    // In the Ubuntu chroot the script runs inside it, as root (LytsoCoder copies the files to /opt/antigem/share/antigem-android)
+    val c = "sudo env ANTIGEM_RUNTIME=chroot bash /opt/antigem/share/antigem-android/android-setup.sh"
+    val steps = if (state.chroot) listOf(
+        "1. The setup files are in /opt/antigem/share/antigem-android (Get setup files above copies them there). See every step" to "$c help",
+        "2. Kotlin / Java / Compose (base java sdk launcher)" to "$c kotlin",
+        "3. Flutter (with release builds) and / or React Native (Node.js and the NDK)" to "$c flutter flutter-release node ndk",
+        "4. Check it, and build a test app (in ~/AndroidProjects)" to "$c doctor && $c test compose"
+    ) else listOf(
         "1. Download the setup files" to
             "mkdir -p \$PREFIX/share/lytsocoder-android && cd \$PREFIX/share/lytsocoder-android && for f in files.json android-setup.sh adev adev-new; do curl -fsSLO $raw/\$f; done",
         "2. See every step" to "bash $s help",
@@ -506,7 +516,8 @@ private fun RemoveCard(state: AndroidDevManager.State, busy: Boolean, cardBg: Co
                 TextButton(onClick = { open = !open }) { Text(if (open) "Hide" else "Show", fontSize = 12.5.sp) }
             }
             if (!open) return@Column
-            Hint("Your projects are never deleted. The Ubuntu container itself is removed on the REA page (Delete container), since both use it.")
+            Hint(if (state.chroot) "Your projects are never deleted. The Ubuntu chroot itself is deleted on its own page (Where agents run → Ubuntu chroot)."
+                else "Your projects are never deleted. The Ubuntu container itself is removed on the REA page (Delete container), since both use it.")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 OutlinedButton(enabled = !busy && state.filesReady, onClick = { onConfirm("clean-cache") }) { Text("Clean Gradle cache") }
                 if (Component.FLUTTER in state.installed) OutlinedButton(enabled = !busy && state.filesReady, onClick = { onConfirm("uninstall-flutter") }) { Text("Remove Flutter") }

@@ -3,7 +3,9 @@ set -euo pipefail
 
 # -----------------------------------------------------------------------------
 # LytsoCoder APK Build & Output Packager
-# Builds the app (lytso.code). --x86_64 builds the x86_64 APK instead of the arm64 one (gradle -Pabi=x86_64).
+# Builds the app (lytso.code). --x86_64 builds the x86_64 APK instead of the arm64 one (gradle -Pabi=x86_64);
+# --chroot builds the arm64 APK with the Ubuntu chroot's Linux bridge (gradle -Pchroot=true). The normal arm64 release
+# leaves that bridge out; the x86_64 APK always has it. Debug builds have it unless gradle -Pchroot=false.
 # -----------------------------------------------------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,46 +14,51 @@ OUTPUT_DIR="${ROOT_DIR}/output"
 
 MODE="debug"
 ABI="arm64"
+CHROOT=""
 for arg in "$@"; do
     case "$arg" in
         --release|-r) MODE="release" ;;
         --x86_64) ABI="x86_64" ;;
+        --chroot) CHROOT="true" ;;
     esac
 done
 # file names: the arm64 build has none of these suffixes (the in-app updater asks for the name of its own build)
 SUFFIX=""
 ARCHIVE="LytsoCoder"
 BRIDGE_ARCH="arm64"
+GRADLE_ARGS=(-Pabi="${ABI}")
 if [[ "${ABI}" == "x86_64" ]]; then
     SUFFIX="-x86_64"
     ARCHIVE="LytsoCoder-x86_64"
     BRIDGE_ARCH="amd64"
+elif [[ "${CHROOT}" == "true" ]]; then
+    SUFFIX="-chroot"
+    ARCHIVE="LytsoCoder-chroot"
+    GRADLE_ARGS+=(-Pchroot=true)
 fi
 
 echo "================================================================="
-echo "🚀 Building LytsoCoder Packages in [${MODE^^}] mode for ${ABI}"
+echo "🚀 Building LytsoCoder Packages in [${MODE^^}] mode for ${ABI}${SUFFIX:+ (${SUFFIX#-})}"
 echo "================================================================="
 
-# Extract version from version.json
-VERSION_NAME="1.0.0"
-VERSION_CODE="1"
-if [[ -f "${ROOT_DIR}/version.json" ]]; then
-    VERSION_NAME=$(python3 -c "import json; print(json.load(open('${ROOT_DIR}/version.json')).get('version_name', '1.0.0'))" 2>/dev/null || echo "1.0.0")
-    VERSION_CODE=$(python3 -c "import json; print(json.load(open('${ROOT_DIR}/version.json')).get('version_code', 1))" 2>/dev/null || echo "1")
-fi
+# The version from version.json: the newer of its stable release and its beta, like the Gradle build. A missing or
+# broken file stops here (Gradle says what is wrong with it).
+VERSION_NAME=$(python3 "${SCRIPT_DIR}/release_version.py" name "${ROOT_DIR}/version.json")
+VERSION_CODE=$(python3 "${SCRIPT_DIR}/release_version.py" code "${ROOT_DIR}/version.json")
+CHANNEL=$(python3 "${SCRIPT_DIR}/release_version.py" channel "${ROOT_DIR}/version.json")
 
-echo "📦 Version Name: v${VERSION_NAME} (Code: ${VERSION_CODE})"
+echo "📦 Version Name: v${VERSION_NAME} (Code: ${VERSION_CODE}, ${CHANNEL})"
 mkdir -p "${OUTPUT_DIR}"
 
 APKS_SRC="${ROOT_DIR}/app/build/outputs/apk"
 if [[ "${MODE}" == "release" ]]; then
     echo "🔨 Compiling Release (:app:assembleRelease)..."
-    "${ROOT_DIR}/gradlew" -p "${ROOT_DIR}" :app:assembleRelease -Pabi="${ABI}"
+    "${ROOT_DIR}/gradlew" -p "${ROOT_DIR}" :app:assembleRelease "${GRADLE_ARGS[@]}"
     # the release asset; the in-app updater downloads releases/download/v<version>/LytsoCoder-v<version><suffix>.apk
     cp "${APKS_SRC}/release/${ARCHIVE}-release.apk" "${OUTPUT_DIR}/LytsoCoder-v${VERSION_NAME}${SUFFIX}.apk"
 else
     echo "🔨 Compiling Debug (:app:assembleDebug)..."
-    "${ROOT_DIR}/gradlew" -p "${ROOT_DIR}" :app:assembleDebug -Pabi="${ABI}"
+    "${ROOT_DIR}/gradlew" -p "${ROOT_DIR}" :app:assembleDebug "${GRADLE_ARGS[@]}"
     cp "${APKS_SRC}/debug/${ARCHIVE}-debug.apk" "${OUTPUT_DIR}/LytsoCoder-v${VERSION_NAME}${SUFFIX}-debug.apk"
 
     # the APK ships the bridge xz-compressed; the uncompressed build is kept under app/build

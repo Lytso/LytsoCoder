@@ -46,6 +46,10 @@ class LytsoCoderApplication : Application(), coil.ImageLoaderFactory {
         Thread { lytso.code.ui.miniapps.MiniAppShortcuts.migrate(this) }.start()
         // Reconnects adb when Wireless debugging turns back on (it gets a new port every time)
         AdbConnectManager.init(this)
+        // ADB / Shizuku / root: which one Android Automation uses, and Shizuku's binder listeners
+        lytso.code.data.adb.DeviceAccess.init(this)
+        // the rooted Ubuntu chroot runtime: its installs and which one is in use (no root call here)
+        lytso.code.data.local.chroot.ChrootManager.init(this)
         lytso.code.data.ssh.SshSessionFactory.init(this)
         // Connect to PC: the paired PCs and the one in use (AuthPreferences reads the latter on its own too)
         lytso.code.data.pc.PcConnect.init(this)

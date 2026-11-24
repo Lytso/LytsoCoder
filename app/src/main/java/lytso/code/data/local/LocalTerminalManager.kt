@@ -31,6 +31,23 @@ data class TmuxWindowInfo(
     val windowId: String? = null
 )
 
+/**
+ * Whether the program in the terminal asked for bracketed paste (DECSET 2004, as bash, zsh and nvim do), so a paste
+ * arrives as one block instead of being typed (and run line by line). The emulator keeps that bit private.
+ */
+private val emulatorDecsetBitMethod: java.lang.reflect.Method by lazy {
+    com.termux.terminal.TerminalEmulator::class.java
+        .getDeclaredMethod("isDecsetInternalBitSet", Int::class.javaPrimitiveType)
+        .apply { isAccessible = true }
+}
+
+private fun com.termux.terminal.TerminalEmulator.isBracketedPasteMode(): Boolean =
+    try {
+        emulatorDecsetBitMethod.invoke(this, 1024) as Boolean // TerminalEmulator.DECSET_BIT_BRACKETED_PASTE_MODE
+    } catch (_: Exception) {
+        false
+    }
+
 fun formatTmuxTitle(winIndex: Int, winName: String): String {
     val displayIndex = winIndex + 1
     val cleanName = winName.trim()
@@ -69,7 +86,9 @@ class LocalPtySession(
     initialWidthPx: Int = 800,
     initialHeightPx: Int = 480,
     /** False for one-off runs (the Run panel): they show their own status, so no "Press Enter to close tab" line. */
-    val showExitNotice: Boolean = true
+    val showExitNotice: Boolean = true,
+    /** Arguments for /system/bin/sh as they are (the Ubuntu chroot's bridge-log view); null: the normal shell. */
+    val rawShellArgs: Array<String>? = null
 ) : TerminalSessionClient {
     private val TAG = "LytsoCoderTerminal"
 
@@ -95,6 +114,11 @@ class LocalPtySession(
 
     private val sessionScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    // Keystrokes to the SSH/tmux side, one at a time in the order typed: on the shared IO pool, separate writes could
+    // run out of order (the write lock isn't first-come first-served), scrambling fast typing.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val sshInputDispatcher = Dispatchers.IO.limitedParallelism(1)
+
     private var jschSession: Session? = null
     private var sshChannel: ChannelExec? = null
     private var sshIn: InputStream? = null
@@ -118,6 +142,8 @@ class LocalPtySession(
             TAG,
             "[$id] Initializing session: name=$name, isSsh=$isSsh, winIdx=$tmuxWindowIndex, paneId=$initialPaneId, dir=$workingDirectory"
         )
+        // the local environment's zsh: Bangla/Hindi marks drawn joined, not as <09cd> (both the direct shell and tmux)
+        LocalEnvironmentManager.ensureZshDefaults(context)
         if (isSsh) {
             val safeCwd = context.filesDir.absolutePath
             val dummyBinary = when {
@@ -142,98 +168,135 @@ class LocalPtySession(
             val safeCols = if (ptyCols > 0) ptyCols else if (LocalTerminalManager.lastKnownCols > 0) LocalTerminalManager.lastKnownCols else 80
             val safeRows = if (ptyRows > 0) ptyRows else if (LocalTerminalManager.lastKnownRows > 0) LocalTerminalManager.lastKnownRows else 24
 
-            val prefix = LocalEnvironmentManager.getPrefixDir(context)
-            val bin = LocalEnvironmentManager.getBinDir(context)
-            val lib = LocalEnvironmentManager.getLibDir(context)
-            val home = LocalEnvironmentManager.getHomeDir(context)
-            val tmp = LocalEnvironmentManager.getTmpDir(context)
+            val isChroot = rawShellArgs != null || lytso.code.data.local.chroot.ChrootManager.isActive(context)
 
-            LocalEnvironmentManager.ensureGlibcEnvironment(context)
-            LocalEnvironmentManager.ensureClaudeWrapper(context)
-            LocalEnvironmentManager.ensureTermuxApiDispatcher(context)
-            TermuxRelocation.ensurePackageHooks(context)
+            if (isChroot) {
+                // the Ubuntu chroot: su runs chrootctl, which enters the chroot as its user (see ChrootManager)
+                val shellBinary = "/system/bin/sh"
+                val termuxHome = LocalEnvironmentManager.getHomeDir(context).absolutePath
+                // a folder inside the chroot (from the bridge: /home/<user>/…); the Termux home is the default, not a chroot path
+                val chrootCwd = workingDirectory.takeIf { it.startsWith("/") && !it.startsWith(termuxHome) && !it.startsWith(context.filesDir.absolutePath) }
+                val cwd = context.filesDir.absolutePath
+                val shellArgs = rawShellArgs ?: lytso.code.data.local.chroot.ChrootManager.terminalArgs(
+                    context, chrootCwd, initialCommand, execShellAfterCommand
+                )
+                val envList = arrayOf(
+                    // the app's PATH: where this phone's su is (/system/bin, /system/xbin, the root manager's folder)
+                    "PATH=${System.getenv("PATH") ?: "/system/bin:/system/xbin"}",
+                    "ANDROID_ROOT=/system",
+                    "ANDROID_DATA=/data",
+                    "TERM=xterm-256color",
+                    "COLORTERM=truecolor",
+                    "LANG=C.UTF-8",
+                    "COLUMNS=$safeCols",
+                    "LINES=$safeRows"
+                )
+                terminalSession = TerminalSession(
+                    shellBinary,
+                    cwd,
+                    shellArgs,
+                    envList,
+                    LocalTerminalManager.currentBufferSize,
+                    this
+                )
+                try {
+                    terminalSession.updateSize(safeCols, safeRows)
+                } catch (_: Exception) {}
+            } else {
+                val prefix = LocalEnvironmentManager.getPrefixDir(context)
+                val bin = LocalEnvironmentManager.getBinDir(context)
+                val lib = LocalEnvironmentManager.getLibDir(context)
+                val home = LocalEnvironmentManager.getHomeDir(context)
+                val tmp = LocalEnvironmentManager.getTmpDir(context)
 
-            val loginShellBinaries = arrayOf("login", "bash", "zsh", "fish", "sh")
+                LocalEnvironmentManager.ensureGlibcEnvironment(context)
+                LocalEnvironmentManager.ensureClaudeWrapper(context)
+                lytso.code.data.adb.DeviceAccess.ensureTerminalCommands(context)
+                LocalEnvironmentManager.ensureTermuxApiDispatcher(context)
+                TermuxRelocation.ensurePackageHooks(context)
 
-            val shellBinary = when {
-                forceShell != null && File(bin, forceShell).exists() && File(bin, forceShell).canExecute() -> File(bin, forceShell).absolutePath
-                forceShell != null && File(bin, forceShell).exists() -> File(bin, forceShell).absolutePath
-                forceShell != null && File(forceShell).exists() -> File(forceShell).absolutePath
-                else -> {
-                    var found: String? = null
-                    for (name in loginShellBinaries) {
-                        val file = File(bin, name)
-                        if (file.exists() && file.canExecute()) {
-                            found = file.absolutePath
-                            break
-                        }
-                    }
-                    if (found == null) {
+                val loginShellBinaries = arrayOf("login", "bash", "zsh", "fish", "sh")
+
+                val shellBinary = when {
+                    forceShell != null && File(bin, forceShell).exists() && File(bin, forceShell).canExecute() -> File(bin, forceShell).absolutePath
+                    forceShell != null && File(bin, forceShell).exists() -> File(bin, forceShell).absolutePath
+                    forceShell != null && File(forceShell).exists() -> File(forceShell).absolutePath
+                    else -> {
+                        var found: String? = null
                         for (name in loginShellBinaries) {
                             val file = File(bin, name)
-                            if (file.exists()) {
+                            if (file.exists() && file.canExecute()) {
                                 found = file.absolutePath
                                 break
                             }
                         }
+                        if (found == null) {
+                            for (name in loginShellBinaries) {
+                                val file = File(bin, name)
+                                if (file.exists()) {
+                                    found = file.absolutePath
+                                    break
+                                }
+                            }
+                        }
+                        found ?: "/system/bin/sh"
                     }
-                    found ?: "/system/bin/sh"
                 }
-            }
 
-            val envMap = LinkedHashMap<String, String>()
-            try {
-                System.getenv().forEach { (k, v) ->
-                    if (v != null) envMap[k] = v
-                }
-            } catch (_: Exception) {}
+                val envMap = LinkedHashMap<String, String>()
+                try {
+                    System.getenv().forEach { (k, v) ->
+                        if (v != null) envMap[k] = v
+                    }
+                } catch (_: Exception) {}
 
-            envMap["PREFIX"] = prefix.absolutePath
-            envMap["HOME"] = home.absolutePath
-            envMap["PATH"] = "${home.absolutePath}/.local/bin:${bin.absolutePath}:${bin.absolutePath}/applets:/system/bin:/system/xbin"
-            envMap["TMPDIR"] = tmp.absolutePath
-            envMap["TERM"] = "xterm-256color"
-            envMap["COLORTERM"] = "truecolor"
-            envMap["TERMUX_VERSION"] = "0.118.0"
-            envMap["TERMUX_MAIN_PACKAGE_NAME"] = context.packageName
-            envMap["TERMUX_APK_RELEASE"] = "GITHUB"
-            envMap["TERMUX_APP_PID"] = "${android.os.Process.myPid()}"
-            envMap["TERMUX__USER_ID"] = "0"
-            envMap["SHELL"] = shellBinary
-            envMap["ANDROID_DATA"] = "/data"
-            envMap["ANDROID_ROOT"] = "/system"
-            envMap["LANG"] = "en_US.UTF-8"
-            envMap["LC_ALL"] = "en_US.UTF-8"
-            envMap["COLUMNS"] = "$safeCols"
-            envMap["LINES"] = "$safeRows"
-            envMap["PS1"] = "$ "
+                envMap["PREFIX"] = prefix.absolutePath
+                envMap["HOME"] = home.absolutePath
+                envMap["PATH"] = "${home.absolutePath}/.local/bin:${bin.absolutePath}:${bin.absolutePath}/applets:/system/bin:/system/xbin"
+                envMap["TMPDIR"] = tmp.absolutePath
+                envMap["TERM"] = "xterm-256color"
+                envMap["COLORTERM"] = "truecolor"
+                envMap["TERMUX_VERSION"] = "0.118.0"
+                envMap["TERMUX_MAIN_PACKAGE_NAME"] = context.packageName
+                envMap["TERMUX_APK_RELEASE"] = "GITHUB"
+                envMap["TERMUX_APP_PID"] = "${android.os.Process.myPid()}"
+                envMap["TERMUX__USER_ID"] = "0"
+                envMap["SHELL"] = shellBinary
+                envMap["ANDROID_DATA"] = "/data"
+                envMap["ANDROID_ROOT"] = "/system"
+                envMap["LANG"] = "en_US.UTF-8"
+                envMap["LC_ALL"] = "en_US.UTF-8"
+                envMap["COLUMNS"] = "$safeCols"
+                envMap["LINES"] = "$safeRows"
+                envMap["PS1"] = "$ "
 
-            val envList = envMap.map { "${it.key}=${it.value}" }.toTypedArray()
+                val envList = envMap.map { "${it.key}=${it.value}" }.toTypedArray()
 
-            val isLoginShell = shellBinary != "/system/bin/sh"
-            val processName = (if (isLoginShell) "-" else "") + File(shellBinary).name
-            val cwd = if (File(workingDirectory).exists()) workingDirectory else home.absolutePath
-            val shellArgs = if (!initialCommand.isNullOrBlank()) {
-                if (execShellAfterCommand) {
-                    arrayOf(processName, "-c", "$initialCommand; exec $shellBinary")
+                val isLoginShell = shellBinary != "/system/bin/sh"
+                val processName = (if (isLoginShell) "-" else "") + File(shellBinary).name
+                val cwd = if (File(workingDirectory).exists()) workingDirectory else home.absolutePath
+                val shellArgs = if (!initialCommand.isNullOrBlank()) {
+                    if (execShellAfterCommand) {
+                        arrayOf(processName, "-c", "$initialCommand; exec $shellBinary")
+                    } else {
+                        arrayOf(processName, "-c", initialCommand)
+                    }
                 } else {
-                    arrayOf(processName, "-c", initialCommand)
+                    arrayOf(processName)
                 }
-            } else {
-                arrayOf(processName)
-            }
 
-            terminalSession = TerminalSession(
-                shellBinary,
-                cwd,
-                shellArgs,
-                envList,
-                LocalTerminalManager.currentBufferSize,
-                this
-            )
-            try {
-                terminalSession.updateSize(safeCols, safeRows)
-            } catch (_: Exception) {
+                terminalSession = TerminalSession(
+                    shellBinary,
+                    cwd,
+                    shellArgs,
+                    envList,
+                    LocalTerminalManager.currentBufferSize,
+                    this
+                )
+                try {
+                    terminalSession.updateSize(safeCols, safeRows)
+                } catch (_: Exception) {
+                }
             }
         }
     }
@@ -622,6 +685,33 @@ class LocalPtySession(
         }
     }
 
+    /**
+     * Renames the session (the terminal drawer's long-press). A tmux window is renamed in tmux, so the name survives a
+     * reconnect and tmux stops naming it after the running command; any other session only changes its title here.
+     */
+    fun rename(newName: String) {
+        // ' would end the quoted tmux argument, | splits the ANTIGEM_INFO line the title is read from
+        val clean = newName.replace(Regex("[\\r\\n'|]"), " ").trim()
+        if (clean.isEmpty() || _isExited.value) return
+        if (isSsh && tmuxParser.isControlModeActive) {
+            tmuxWindowIndex?.let { _title.value = formatTmuxTitle(it, clean) }
+            sessionScope.launch(Dispatchers.IO) {
+                synchronized(sshWriteLock) {
+                    try {
+                        val target = assignedPaneId ?: (tmuxWindowIndex?.let { "$tmuxSessionName:$it" } ?: "")
+                        val targetArg = if (target.isNotEmpty()) "-t $target " else ""
+                        sshOut?.write("rename-window $targetArg'$clean'\n".toByteArray(Charsets.UTF_8))
+                        sshOut?.flush()
+                    } catch (_: Exception) {
+                    }
+                }
+                scheduleDebouncedInfoUpdate(150)
+            }
+        } else {
+            _title.value = clean
+        }
+    }
+
     fun requestInfoUpdate() {
         if (!isSsh || !tmuxParser.isControlModeActive || _isExited.value) return
         val now = System.currentTimeMillis()
@@ -658,7 +748,7 @@ class LocalPtySession(
         val repr = String(copy, Charsets.UTF_8).replace("\n", "\\n").replace("\r", "\\r")
         val hex = TmuxControlParser.encodeToHex(copy)
         Log.d(TAG, "[$id] APP -> SSH: \"$repr\" (hex=$hex)")
-        sessionScope.launch(Dispatchers.IO) {
+        sessionScope.launch(sshInputDispatcher) {
             synchronized(sshWriteLock) {
                 try {
                     if (tmuxParser.isControlModeActive) {
@@ -927,7 +1017,7 @@ class LocalPtySession(
             if (clip != null && clip.itemCount > 0) {
                 val text = clip.getItemAt(0).coerceToText(context)?.toString()
                 if (!text.isNullOrEmpty()) {
-                    write(text)
+                    paste(text)
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         android.widget.Toast.makeText(context, "Pasted text", android.widget.Toast.LENGTH_SHORT).show()
                     }
@@ -979,6 +1069,20 @@ class LocalPtySession(
         } else {
             terminalSession.write(text)
         }
+    }
+
+    /**
+     * Pastes [text] (long-press Paste, or text the keyboard pastes or commits in one go) like Termux's own paste: Esc
+     * and C1 control characters removed, line ends as Enter (\r), wrapped in bracketed-paste markers when the program
+     * asked for them (so bash, zsh, nvim take it as one pasted block and run nothing). Sent as ONE write: typed in
+     * character by character, the shell redraws its line after every character and the app has to draw all of it.
+     */
+    fun paste(text: String) {
+        if (_isExited.value || text.isEmpty()) return
+        val clean = text.replace(Regex("[\\u001B\\u0080-\\u009F]"), "").replace(Regex("\r?\n"), "\r")
+        if (clean.isEmpty()) return
+        val bracketed = terminalSession.emulator?.isBracketedPasteMode() == true
+        write(if (bracketed) "\u001B[200~$clean\u001B[201~" else clean)
     }
 
     fun writeCodePoint(prependEscape: Boolean, codePoint: Int) {
@@ -1548,6 +1652,10 @@ object LocalTerminalManager {
         if (currentIndex == -1) return
         val nextIndex = (currentIndex + 1) % current.size
         selectSession(current[nextIndex].id, context)
+    }
+
+    fun renameSession(id: String, newName: String) {
+        _sessions.value.find { it.id == id }?.rename(newName)
     }
 
     fun closeSession(id: String) {

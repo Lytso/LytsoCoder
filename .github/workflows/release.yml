@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        abi: [arm64, x86_64]
+        abi: [arm64, chroot, x86_64]
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -65,7 +65,7 @@ jobs:
       - name: Parse version.json
         id: version
         run: |
-          VERSION_NAME=$(python3 -c "import json; print(json.load(open('version.json')).get('version_name', '1.0.0'))")
+          VERSION_NAME=$(python3 scripts/release_version.py name)
           echo "tag=v${VERSION_NAME}" >> $GITHUB_OUTPUT
 
       - name: Restore Keystore from Secret
@@ -84,13 +84,19 @@ jobs:
         run: |
           chmod +x gradlew scripts/build_all_apks.sh
           # the x86_64 bridge links through the Android NDK's clang, which the runner has (ANDROID_NDK_HOME)
-          if [ "${{ matrix.abi }}" = "x86_64" ]; then ./scripts/build_all_apks.sh --release --x86_64; else ./scripts/build_all_apks.sh --release; fi
+          if [ "${{ matrix.abi }}" = "x86_64" ]; then
+            ./scripts/build_all_apks.sh --release --x86_64
+          elif [ "${{ matrix.abi }}" = "chroot" ]; then
+            ./scripts/build_all_apks.sh --release --chroot
+          else
+            ./scripts/build_all_apks.sh --release
+          fi
 
       # R8 mapping of this build, to decode its crash stack traces (retrace)
       - name: Save R8 mapping
         run: |
           SUFFIX=""
-          if [ "${{ matrix.abi }}" = "x86_64" ]; then SUFFIX="-x86_64"; fi
+          if [ "${{ matrix.abi }}" = "x86_64" ]; then SUFFIX="-x86_64"; elif [ "${{ matrix.abi }}" = "chroot" ]; then SUFFIX="-chroot"; fi
           zip -j "output/LytsoCoder-${{ steps.version.outputs.tag }}${SUFFIX}-mapping.zip" app/build/outputs/mapping/release/mapping.txt
 
       - name: Upload build output
@@ -113,8 +119,16 @@ jobs:
       - name: Parse version.json
         id: version
         run: |
-          VERSION_NAME=$(python3 -c "import json; print(json.load(open('version.json')).get('version_name', '1.0.0'))")
-          CHANGELOG=$(python3 -c "import json; cl = json.load(open('version.json')).get('changelog', ''); print('\n'.join(cl) if isinstance(cl, list) else cl)")
+          VERSION_NAME=$(python3 scripts/release_version.py name)
+          CHANNEL=$(python3 scripts/release_version.py channel)
+          CHANGELOG=$(python3 scripts/release_version.py changelog)
+          if [ "$CHANNEL" = "beta" ]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "make_latest=false" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "make_latest=true" >> $GITHUB_OUTPUT
+          fi
           echo "tag=v${VERSION_NAME}" >> $GITHUB_OUTPUT
           echo "name=v${VERSION_NAME}" >> $GITHUB_OUTPUT
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
@@ -135,6 +149,8 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: ${{ steps.version.outputs.name }}
           body: ${{ steps.version.outputs.changelog }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          make_latest: ${{ steps.version.outputs.make_latest }}
           generate_release_notes: true
           files: output/*
         env:

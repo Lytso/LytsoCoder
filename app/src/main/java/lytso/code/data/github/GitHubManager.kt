@@ -568,7 +568,7 @@ object GitHubManager {
             if (line.startsWith("LYTSOCODER_CLONED_PATH=")) path = line.removePrefix("LYTSOCODER_CLONED_PATH=").trim()
             else if (line.isNotBlank() && !line.contains('%')) log += line
         }
-        val exit = if (remote) {
+        val exit = if (remote || lytso.code.data.local.chroot.ChrootManager.isActiveNow()) {
             lytso.code.data.remote.AgyBridgeService.instance.cloneRepository(url, folder.orEmpty(), onLine = sink)
         } else {
             LocalEnvironmentManager.executeScriptLive(context, "git_clone", listOfNotNull(url, folder?.takeIf { it.isNotBlank() }), sink).exitCode

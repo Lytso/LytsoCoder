@@ -38,6 +38,8 @@ object GlobalContext {
     )
 
     private const val MAX_REMEMBERED_CHATS = 600
+    /** Kept instead of a fingerprint for a chat whose first prompt was undone: its next message is a first message again. */
+    private const val RESTARTED = "restart"
 
     private var sp: SharedPreferences? = null
     private var filesDir: String = "/data/data/${BuildConfig.APPLICATION_ID}/files"
@@ -246,9 +248,27 @@ object GlobalContext {
 
     // ------------------------------------------------------------------ the built-in text
 
-    /** The bridge on this phone: the agent runs in the app's Linux system (Termux packages), not on a server. */
+    /** Where the agents run right now: what the built-in context tells them. */
+    enum class RunPlace { ANTIGEM, CHROOT, SERVER, PC }
+
+    val runPlace: RunPlace
+        get() = when {
+            AuthPreferences.pcOverride != null -> RunPlace.PC
+            AuthPreferences.isRemoteEndpoint() -> RunPlace.SERVER
+            lytso.code.data.local.chroot.ChrootManager.isActiveNow() -> RunPlace.CHROOT
+            else -> RunPlace.ANTIGEM
+        }
+
+    /** The bridge runs on this phone: LytsoCoder's built-in environment or the Ubuntu chroot. */
     val runsOnPhone: Boolean
-        get() = runsOnPhoneTestOverride ?: !AuthPreferences.isRemoteEndpoint()
+        get() = runsOnPhoneTestOverride ?: (runPlace == RunPlace.ANTIGEM || runPlace == RunPlace.CHROOT)
+
+    /** The agents can read files in the app's own folder: only in LytsoCoder's built-in environment (not the chroot, a server or a PC). */
+    val canReadAppFiles: Boolean
+        get() = runsOnPhoneTestOverride ?: (runPlace == RunPlace.ANTIGEM)
+
+    /** Every place: root only when the user asks. */
+    private const val ROOT_RULE = "- Root: never use `sudo`, `su` or any other root access on your own. Only when the user asks you to; if a task needs it, ask the user first.\n"
 
     /** Effective built-in context (customized if edited in Settings, otherwise [defaultBuiltInText]). */
     fun builtInText(h: String = "##"): String {
@@ -266,23 +286,46 @@ object GlobalContext {
         val rootActive = rootActiveTestOverride ?: (policy.allowRoot && permSnap.rootGranted)
         val extraRoots = _customExplorerRoots.value
 
-        if (runsOnPhone) {
-            append("$h Where you run\n")
-            append("- Android, in the LytsoCoder app's Linux system (Termux packages): /tmp, /usr, /etc are not usable.\n")
-            append("- Temporary files: use ~/lytso_home/tmp or \$TMPDIR ($filesDir/usr/tmp), never /tmp. Install packages with `pkg install <name>`.\n")
-            append("- Home is \$HOME ($filesDir/home); phone storage is /sdcard.\n")
-            if (rootActive) {
-                append("- Root access: ENABLED (superuser active). You have verified root privileges via `su` and are authorized to execute privileged commands and system modifications when requested (always snapshot critical changes to ~/lytso_home/backups/ first).\n")
-            } else {
-                append("- Root access: DISABLED. You operate strictly without superuser privileges (standard Termux user only; `su`/`sudo` are blocked). Do not attempt privileged commands.\n")
+        val effectivePlace = if (runsOnPhoneTestOverride == true) RunPlace.ANTIGEM else runPlace
+        append("$h Where you run\n")
+        when (effectivePlace) {
+            RunPlace.ANTIGEM -> {
+                append("- Android, in the LytsoCoder app's Linux system (Termux packages): /tmp, /usr, /etc are not usable.\n")
+                append("- Temporary files: use ~/lytso_home/tmp or \$TMPDIR ($filesDir/usr/tmp), never /tmp. Install packages with `pkg install <name>`.\n")
+                append("- Home is \$HOME ($filesDir/home); phone storage is /sdcard.\n")
+                if (rootActive) {
+                    append("- Root access: ENABLED (superuser active). You have verified root privileges via `su` and are authorized to execute privileged commands and system modifications when requested (always snapshot critical changes to ~/lytso_home/backups/ first).\n")
+                } else {
+                    append("- Root access: DISABLED. You operate strictly without superuser privileges (standard Termux user only; `su`/`sudo` are blocked). Do not attempt privileged commands.\n")
+                }
+                val caps = listOf(
+                    "Shell=${if (policy.allowShellExec) "ENABLED" else "DISABLED"}",
+                    "FileWrite=${if (policy.allowFileWrite) "ENABLED" else "DISABLED"}",
+                    "Network=${if (policy.allowNetwork) "ENABLED" else "DISABLED"}",
+                    "AllFilesStorage=${if (policy.allowAllFiles) "ENABLED" else "STANDARD"}"
+                ).joinToString(", ")
+                append("- Active AI capabilities: $caps.\n\n")
             }
-            val caps = listOf(
-                "Shell=${if (policy.allowShellExec) "ENABLED" else "DISABLED"}",
-                "FileWrite=${if (policy.allowFileWrite) "ENABLED" else "DISABLED"}",
-                "Network=${if (policy.allowNetwork) "ENABLED" else "DISABLED"}",
-                "AllFilesStorage=${if (policy.allowAllFiles) "ENABLED" else "STANDARD"}"
-            ).joinToString(", ")
-            append("- Active AI capabilities: $caps.\n\n")
+            RunPlace.CHROOT -> {
+                val inst = lytso.code.data.local.chroot.ChrootManager.activeInstallNow()
+                val user = inst?.user ?: "ubuntu"
+                append("- An Android phone, inside a rooted Ubuntu chroot (${inst?.os?.takeIf { it.isNotBlank() } ?: "Ubuntu"}): a normal glibc Ubuntu where apt, /tmp, /usr and /etc work. It shares Android's kernel and has no systemd (`systemctl` does not work): start services yourself.\n")
+                append("- You run as user `$user` (home /home/$user). `sudo` (often without a password) gives root of the WHOLE PHONE, not only of Ubuntu.\n")
+                append("- Root: never use `sudo`, `su` or root on your own; only when the user asks you to. A task needs a package? Ask the user before running `sudo apt install <name>`.\n")
+                append("- Phone storage is /sdcard and USB drives are under /storage, when the user shared them into the chroot. Folders shared into the chroot are the phone's real folders: what you delete there is deleted on the phone.\n")
+                append("- Android's own tools (`termux-*`, `am`, `pm`) are not available here. The phone may be reachable through adb (`adb shell …`), Shizuku (`rish -c '…'`) or its root (`android-su -c '…'`): use them only when the user asks you to.\n\n")
+            }
+            RunPlace.SERVER -> {
+                append("- On the user's own server (not the phone): the user reads and answers in the LytsoCoder app on their phone. Paths are paths on the server.\n")
+                append(ROOT_RULE)
+                append("\n")
+            }
+            RunPlace.PC -> {
+                val pc = AuthPreferences.pcOverride?.pcName?.takeIf { it.isNotBlank() }
+                append("- On the user's computer${pc?.let { " ($it)" } ?: ""}, through LytsoCoder for VS Code: right now the user reads and answers on their phone (LytsoCoder's Connect to PC). Paths are paths on that computer.\n")
+                append(ROOT_RULE)
+                append("\n")
+            }
         }
         append("$h Workspace layout (~/lytso_home/ — STRICT)\n")
         append("Never drop loose files in \$HOME. Organize all work strictly inside ~/lytso_home/:\n")
@@ -372,7 +415,7 @@ object GlobalContext {
             livePermissionsSection()?.let { parts += it }
         }
         // Settings → STEM & diagrams: the extra blocks this chat renders (normal chats only, not Jarvis)
-        lytso.code.data.render.RenderBundle.promptSection(canReadFiles = runsOnPhone)?.let { parts += it }
+        lytso.code.data.render.RenderBundle.promptSection(canReadFiles = canReadAppFiles)?.let { parts += it }
         val own = active().filter { !it.everyMessage }
         if (own.isNotEmpty()) parts += "## The user's own instructions\n" + entriesBlock(own)
         return parts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
@@ -414,14 +457,16 @@ object GlobalContext {
         val first = firstMessageBody()
         val fp = fingerprint()
         val known = chatId?.takeIf { it.isNotBlank() }?.let { id -> synchronized(sent) { sent[id] } }
-        val sendFirst = first != null && (!hasEarlierMessages || known != fp)
+        // a chat whose first prompt was undone starts over, even while its old messages may still be listed
+        val fresh = !hasEarlierMessages || known == RESTARTED
+        val sendFirst = first != null && (fresh || known != fp)
         val every = everyMessageBody(chatId, includeChatSystemPrompt, agent)
         if (!sendFirst && every == null) return text to null
         val note = buildString {
             if (sendFirst) {
                 append(
                     when {
-                        !hasEarlierMessages -> "[LytsoCoder app context: from the app the user chats through, not written by the user. Follow it for this whole chat; it is not repeated.]"
+                        fresh -> "[LytsoCoder app context: from the app the user chats through, not written by the user. Follow it for this whole chat; it is not repeated.]"
                         known != null -> "[LytsoCoder app context, updated: it replaces the earlier copy in this chat. Follow it from now on.]"
                         else -> "[LytsoCoder app context: from the app the user chats through. Follow it from now on in this chat.]"
                     }
@@ -444,6 +489,12 @@ object GlobalContext {
             while (sent.size > MAX_REMEMBERED_CHATS) sent.remove(sent.keys.first())
         }
         persistSent()
+    }
+
+    /** The chat's first prompt was undone: it starts over, so its next message carries the context as a first message. */
+    fun restart(chatId: String?) {
+        if (chatId.isNullOrBlank()) return
+        markSent(chatId, RESTARTED)
     }
 
     /** The chat lost its first-message context (compacted, first message edited): send it again with the next message. */

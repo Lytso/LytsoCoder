@@ -106,7 +106,8 @@ fun GitCloneDialog(
             val startedAt = System.currentTimeMillis()
             // Remote mode: the repository is cloned by the bridge on the server, not by a script on the phone
             val runClone: suspend ((String) -> Unit) -> Pair<Int, Long> = { sink ->
-                if (lytso.code.data.preferences.AuthPreferences.currentRemoteMode) {
+                // the Ubuntu chroot too: its git is inside the chroot, which the bridge runs in
+                if (lytso.code.data.preferences.AuthPreferences.currentRemoteMode || lytso.code.data.local.chroot.ChrootManager.isActiveNow()) {
                     val code = lytso.code.data.remote.AgyBridgeService.instance
                         .cloneRepository(trimmedUrl, projectName.trim(), onLine = sink)
                     code to (System.currentTimeMillis() - startedAt)

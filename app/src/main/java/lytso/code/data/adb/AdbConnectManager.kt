@@ -5,7 +5,12 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.database.ContentObserver
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.os.Build
@@ -20,6 +25,8 @@ import androidx.core.content.ContextCompat
 import lytso.code.R
 import lytso.code.data.local.LocalCommandResult
 import lytso.code.data.local.LocalEnvironmentManager
+import lytso.code.data.local.chroot.ChrootInstall
+import lytso.code.data.local.chroot.ChrootSetup
 import lytso.code.data.preferences.AuthPreferences
 import lytso.code.data.remote.AdbTunnel
 import lytso.code.data.remote.RemoteServerManager
@@ -91,7 +98,12 @@ object AdbConnectManager {
         val pairing: Pairing = Pairing.Idle,
         val host: String = DEFAULT_HOST,
         val autoReconnect: Boolean = true,
-        val pairedOnce: Boolean = false
+        val pairedOnce: Boolean = false,
+        /** Turn Wireless debugging back on by itself (after a reboot or Wi-Fi drop); needs [secureSettings]. */
+        val autoWireless: Boolean = false,
+        /** LytsoCoder holds WRITE_SECURE_SETTINGS (granted once through adb, Shizuku or root). */
+        val secureSettings: Boolean = false,
+        val grantingSecureSettings: Boolean = false
     ) {
         val connectedDevice: Device? get() = devices.firstOrNull { it.state == "device" }
     }
@@ -115,7 +127,9 @@ object AdbConnectManager {
             it.copy(
                 host = prefs.getString("host", DEFAULT_HOST) ?: DEFAULT_HOST,
                 autoReconnect = prefs.getBoolean("auto_reconnect", true),
-                pairedOnce = prefs.getBoolean("paired_once", false)
+                pairedOnce = prefs.getBoolean("paired_once", false),
+                autoWireless = prefs.getBoolean("auto_wireless", false),
+                secureSettings = hasSecureSettings()
             )
         }
         // adbd picks a new port each time Wireless debugging turns on (also after Wi-Fi drops)
@@ -129,7 +143,18 @@ object AdbConnectManager {
                 }
             )
         }.onFailure { Log.w(TAG, "Cannot watch Wireless debugging: ${it.message}") }
-        if (isWirelessDebuggingOn(appContext)) maybeAutoConnect()
+        // Wireless debugging goes off when Wi-Fi drops: turn it back on when Wi-Fi is back (if the user wants that)
+        runCatching {
+            appContext.getSystemService(ConnectivityManager::class.java).registerNetworkCallback(
+                NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(),
+                object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: Network) {
+                        scope.launch { delay(3000); maybeTurnOnWireless() }
+                    }
+                }
+            )
+        }.onFailure { Log.w(TAG, "Cannot watch Wi-Fi: ${it.message}") }
+        if (isWirelessDebuggingOn(appContext)) maybeAutoConnect() else scope.launch { delay(2000); maybeTurnOnWireless() }
     }
 
     /** Ports of this phone's Wireless debugging "connect" service (changes every time Wireless debugging turns on). */
@@ -174,6 +199,82 @@ object AdbConnectManager {
 
     fun clearMessage() = _state.update { it.copy(message = null, isError = false) }
 
+    // ---------------- Wireless debugging on by itself ----------------
+
+    private const val WRITE_SECURE_SETTINGS = "android.permission.WRITE_SECURE_SETTINGS"
+
+    fun hasSecureSettings(): Boolean =
+        appContext.checkSelfPermission(WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Turns "Wireless debugging on by itself" on or off. Turning it on needs WRITE_SECURE_SETTINGS (only the shell user
+     * can grant it): granted here through whatever is ready, the adb connection, Shizuku or root.
+     */
+    fun setAutoWireless(enabled: Boolean) = scope.launch {
+        if (!enabled) {
+            prefs.edit().putBoolean("auto_wireless", false).apply()
+            _state.update { it.copy(autoWireless = false) }
+            return@launch
+        }
+        if (!hasSecureSettings()) {
+            _state.update { it.copy(grantingSecureSettings = true) }
+            val error = try { grantSecureSettings() } finally { _state.update { it.copy(grantingSecureSettings = false) } }
+            if (error != null) {
+                report(error, true)
+                return@launch
+            }
+        }
+        prefs.edit().putBoolean("auto_wireless", true).apply()
+        _state.update { it.copy(autoWireless = true, secureSettings = true) }
+        report("Wireless debugging will be turned back on by itself while LytsoCoder runs.")
+        maybeTurnOnWireless()
+    }
+
+    /** `pm grant` of WRITE_SECURE_SETTINGS to LytsoCoder through adb, Shizuku or root; null when it worked, else why not. */
+    private suspend fun grantSecureSettings(): String? {
+        val command = "pm grant ${appContext.packageName} $WRITE_SECURE_SETTINGS"
+        val device = refreshNow().let { _state.value.connectedDevice }
+        val tried = mutableListOf<String>()
+        if (device != null) {
+            tried += "adb: " + deviceShell(device, command, 20).output.trim().ifBlank { "no output" }
+        }
+        if (!hasSecureSettings() && ShizukuShell.status.value.ready) {
+            tried += "Shizuku: " + DeviceAccess.shell(command, 20, DeviceAccess.Mode.SHIZUKU).output.trim().ifBlank { "no output" }
+        }
+        if (!hasSecureSettings() && RootShell.state.value.check == RootShell.Check.GRANTED) {
+            tried += "root: " + DeviceAccess.shell(command, 20, DeviceAccess.Mode.ROOT).output.trim().ifBlank { "no output" }
+        }
+        if (hasSecureSettings()) return null
+        return if (tried.isEmpty()) "Connect adb first (or set up Shizuku or root): granting this needs one of them once."
+        else "Couldn't grant the permission. ${tried.joinToString("; ")}"
+    }
+
+    private fun onWifi(): Boolean = runCatching {
+        val cm = appContext.getSystemService(ConnectivityManager::class.java)
+        @Suppress("DEPRECATION")
+        cm.allNetworks.any { cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true }
+    }.getOrDefault(false)
+
+    /**
+     * Switches Wireless debugging on when the user asked for that, LytsoCoder may (WRITE_SECURE_SETTINGS), the phone is on
+     * Wi-Fi and Developer options are on. True when it is on now. On a Wi-Fi network not allowed before, Android asks
+     * the user first and leaves it off until they allow it.
+     */
+    private fun maybeTurnOnWireless(): Boolean {
+        if (!::appContext.isInitialized || !isWirelessDebuggingSupported()) return false
+        if (isWirelessDebuggingOn(appContext)) return true
+        val s = _state.value
+        if (!s.autoWireless || !isDeveloperOptionsOn(appContext) || !onWifi()) return false
+        if (!hasSecureSettings()) {
+            _state.update { it.copy(secureSettings = false) }
+            return false
+        }
+        return runCatching { Settings.Global.putInt(appContext.contentResolver, ADB_WIFI_ENABLED, 1) }
+            .onSuccess { Log.d(TAG, "Turned Wireless debugging on") }
+            .onFailure { Log.w(TAG, "Turning Wireless debugging on failed: ${it.message}") }
+            .isSuccess
+    }
+
     private fun report(message: String, isError: Boolean = false) =
         _state.update { it.copy(message = message, isError = isError) }
 
@@ -182,8 +283,18 @@ object AdbConnectManager {
     /** In server mode adb means the SERVER's adb: everything here runs there, over the app's SSH connection. */
     private val remote get() = AuthPreferences.currentRemoteMode
 
+    /**
+     * When the Ubuntu chroot is this phone's runtime, adb means the chroot's adb (Ubuntu's adb and fastboot): the agents
+     * there use it, so it runs as the chroot's user and its pairing keys live in their ~/.android. Null otherwise.
+     */
+    private val chroot: ChrootInstall? get() = ChrootSetup.install()
+
+    /** Whether adb lives in the Ubuntu chroot (for the screen's wording). */
+    val inChroot: Boolean get() = chroot != null
+
     private suspend fun shell(command: String, timeoutSeconds: Long = 30, onLine: ((String) -> Unit)? = null): LocalCommandResult {
         if (remote) return serverShell(command, timeoutSeconds, onLine)
+        chroot?.let { return chrootShell(it, command, timeoutSeconds, onLine) }
         return LocalEnvironmentManager.executeCommand(
             "( $command ) < /dev/null", appContext, timeoutSeconds = timeoutSeconds,
             customEnv = mapOf("DEBIAN_FRONTEND" to "noninteractive"), onOutputLine = onLine
@@ -200,6 +311,14 @@ object AdbConnectManager {
         LocalCommandResult(code, out, System.currentTimeMillis() - started)
     }
 
+    private suspend fun chrootShell(install: ChrootInstall, command: String, timeoutSeconds: Long, onLine: ((String) -> Unit)?): LocalCommandResult {
+        val started = System.currentTimeMillis()
+        val r = ChrootSetup.asUser(appContext, install, "( $command ) < /dev/null 2>&1", timeoutMs = (timeoutSeconds + 15) * 1000, onLine = onLine)
+        // chrootctl's own errors (no root, chroot not there) come on stderr
+        val output = r.out.joinToString("\n").ifBlank { if (r.ok) "" else r.message() }
+        return LocalCommandResult(r.exitCode, output, System.currentTimeMillis() - started)
+    }
+
     // `timeout` keeps a stuck adb from blocking the output reader forever
     private suspend fun adb(args: String, seconds: Int = 20) = shell("timeout $seconds adb $args", seconds + 5L)
 
@@ -207,6 +326,27 @@ object AdbConnectManager {
     fun refresh(quiet: Boolean = false) = scope.launch {
         if (!quiet) _state.update { it.copy(refreshing = true) }
         try { refreshNow() } finally { _state.update { it.copy(refreshing = false) } }
+    }
+
+    /**
+     * Refreshes, then connects the way the Connect button does with no port (this phone, port found by itself) when
+     * adb was paired, nothing is connected and Wireless debugging is on. For opening the ADB page (also when switching
+     * back to ADB from Shizuku or Root) and its refresh button: auto-reconnect only reacts to the app starting and to
+     * Wireless debugging turning on, so a connection lost in between would otherwise stay lost. [quiet] hides "couldn't
+     * connect" messages.
+     */
+    fun refreshAndConnect(quiet: Boolean = true) = scope.launch {
+        _state.update { it.copy(refreshing = true) }
+        try { refreshNow() } finally { _state.update { it.copy(refreshing = false) } }
+        val s = _state.value
+        if (s.adbInstalled != true || s.connectedDevice != null || !s.pairedOnce || s.busy != null) return@launch
+        if (pairingJob?.isActive == true || autoConnectJob?.isActive == true || connectJob?.isActive == true) return@launch
+        if (!remote && !isWirelessDebuggingOn(appContext)) {
+            // when LytsoCoder may turn it on, the Wireless debugging watcher connects as soon as it is on
+            if (!maybeTurnOnWireless() && !quiet) report("Wireless debugging is off. Turn it on to connect.", true)
+            return@launch
+        }
+        connectJob = scope.launch { connectNow(null, quiet) }
     }
 
     private suspend fun refreshNow() {
@@ -242,6 +382,22 @@ object AdbConnectManager {
                 appendInstallLog(r.fold({ it }, { it.message ?: "Install failed" }))
                 refreshNow()
                 _state.update { it.copy(installing = false, installError = r.exceptionOrNull()?.message) }
+                return@launch
+            }
+            chroot?.let { install ->
+                // Ubuntu's own adb and fastboot: they run as the user without sudo (the user is in Android's usb group)
+                appendInstallLog("Installing adb and fastboot in the Ubuntu chroot (Ubuntu's packages)…")
+                val keep = "-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
+                val command = "export DEBIAN_FRONTEND=noninteractive; dpkg --configure -a >/dev/null 2>&1; " +
+                    "apt-get update -q && apt-get install -y -q --no-install-recommends $keep adb fastboot"
+                appendInstallLog("$ apt-get install adb fastboot")
+                val r = ChrootSetup.asRoot(appContext, install, "( $command ) 2>&1", timeoutMs = 900_000L) { line -> if (line.isNotBlank()) appendInstallLog(line) }
+                refreshNow()
+                val ok = _state.value.adbInstalled == true
+                _state.update {
+                    it.copy(installing = false, installError = if (ok) null else "Install failed (exit ${r.exitCode}). Check the log above.")
+                }
+                if (ok) appendInstallLog("✓ ${_state.value.adbVersion ?: "adb installed"} (and fastboot)")
                 return@launch
             }
             // Termux is rolling-release: installing only android-tools can leave older libraries (libprotobuf…) that the new
@@ -335,7 +491,13 @@ object AdbConnectManager {
         if (!::appContext.isInitialized) return null
         refreshNow()
         _state.value.connectedDevice?.let { return it }
-        if (_state.value.adbInstalled != true || !_state.value.pairedOnce || !isWirelessDebuggingOn(appContext)) return null
+        if (_state.value.adbInstalled != true || !_state.value.pairedOnce) return null
+        if (!isWirelessDebuggingOn(appContext)) {
+            if (!maybeTurnOnWireless()) return null
+            // adbd needs a moment to come up (and Android may still ask about this Wi-Fi network)
+            withTimeoutOrNull(8_000) { while (!isWirelessDebuggingOn(appContext)) delay(250) } ?: return null
+            delay(1500)
+        }
         connectNow(null, quiet = true)
         return _state.value.connectedDevice
     }
@@ -423,6 +585,11 @@ object AdbConnectManager {
         val out = if (remote) AdbTunnel.pairServer(appContext, code, port).fold({ "Successfully paired" }, { it.message ?: "Pairing failed" })
         else adb("pair $host:$port $code", 25).output.trim()
         if (!out.contains("Successfully paired")) {
+            // Ubuntu 22.04's adb (29) has no `adb pair`: Wi-Fi pairing needs adb 30 or newer
+            if (out.contains("unknown command", ignoreCase = true)) {
+                setPairing(Pairing.Failed("This adb is too old to pair over Wi-Fi (it needs adb 30 or newer; the Ubuntu chroot needs Ubuntu 24.04 or newer).", port))
+                return@launch
+            }
             val reason = out.lineSequence().lastOrNull { it.isNotBlank() }?.removePrefix("error: ") ?: "No response from adb"
             setPairing(Pairing.Failed("$reason. Check the code and try again.", port))
             return@launch

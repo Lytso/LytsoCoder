@@ -85,3 +85,6 @@
 }
 # WorkManager's Room database is created by reflection; R8 full mode strips its no-arg constructor.
 -keep class * extends androidx.room.RoomDatabase { <init>(); }
+
+# Shizuku starts this class by name (from this APK) in a process of its own
+-keep class lytso.code.data.adb.DeviceShellService { <init>(...); }

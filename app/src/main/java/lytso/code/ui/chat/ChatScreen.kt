@@ -19,6 +19,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -47,6 +49,8 @@ import lytso.code.data.preferences.AuthPreferences
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
@@ -140,7 +144,10 @@ fun ChatScreen(
     onNavigateToBrowser: () -> Unit = {},
     // null where that screen doesn't exist (the floating chat window): its header icon is then hidden
     onNavigateToNotes: (() -> Unit)? = null,
-    onNavigateToFiles: (() -> Unit)? = null
+    onNavigateToFiles: (() -> Unit)? = null,
+    // Y (root px) where the bottom input area starts, including the jump-to-top/bottom button that floats just above
+    // it; the floating app switcher keeps above it while the keyboard is open
+    onBottomAreaTopChanged: (Float) -> Unit = {}
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -316,9 +323,13 @@ fun ChatScreen(
     val projectsList by viewModel.projectsList.collectAsState()
     val isProjectsLoading by viewModel.isProjectsLoading.collectAsState()
     val groupChatsByWorkspace by viewModel.groupChatsByWorkspace.collectAsState()
+    val groupAgentSteps by viewModel.groupAgentSteps.collectAsState()
+    val groupStepsMin by viewModel.groupStepsMin.collectAsState()
+    val showMessageStats by viewModel.showMessageStats.collectAsState()
     val showArchivedChats by viewModel.showArchivedChats.collectAsState()
     val floatingSwitcherOrientation by viewModel.floatingSwitcherOrientation.collectAsState()
     val floatingSwitcherItems by viewModel.floatingSwitcherItems.collectAsState()
+    val floatingSwitcherHandleIcon by viewModel.floatingSwitcherHandleIcon.collectAsState()
     val chatHeaderItems by viewModel.chatHeaderItems.collectAsState()
     val floatingSwitcherAutoCollapseSec by viewModel.floatingSwitcherAutoCollapseSec.collectAsState()
     val isFloatingDiagnosticsEnabled by viewModel.isFloatingDiagnosticsEnabled.collectAsState()
@@ -406,6 +417,14 @@ fun ChatScreen(
         showSettingsDialog = true
         lytso.code.data.jarvis.JarvisController.consumeSettingsRequest()
     }
+    // another screen asked to show a settings page (the terminal drawer's gear: Settings → Terminal)
+    val screenSettingsRequest by viewModel.requestedSettingsSection.collectAsState()
+    LaunchedEffect(screenSettingsRequest) {
+        val name = screenSettingsRequest ?: return@LaunchedEffect
+        requestedSettingsSection = runCatching { lytso.code.ui.settings.SettingsSection.valueOf(name) }.getOrNull()
+        showSettingsDialog = true
+        viewModel.consumeRequestedSettingsSection()
+    }
 
     // Antigravity cloud agents (Remote Agents): cloud projects, through the hub
     LaunchedEffect(Unit) { lytso.code.data.agent.agy.AgyCloud.init(context) }
@@ -474,6 +493,28 @@ fun ChatScreen(
     // the voice agent moved the call to another chat (it started a new one): show that chat
     LaunchedEffect(Unit) {
         lytso.code.data.voice.AgyVoiceCall.conversationMoved.collect { id -> viewModel.selectConversation(id) }
+    }
+    // the Voice call tile or shortcut opened the app (it was not running, or not ready to call out of sight): once the
+    // server is up, open the last chat that had a call and call as the call button does (voice picker, mic permission)
+    val startVoiceCallNow by rememberUpdatedState(onStartVoiceCall)
+    LaunchedEffect(Unit) {
+        lytso.code.data.voice.VoiceCallLauncher.pending.collect { at ->
+            if (at == 0L) return@collect
+            val serverUp = kotlinx.coroutines.withTimeoutOrNull(90_000) {
+                viewModel.systemConnectionState.firstOrNull { it.canSend }
+            } != null
+            if (!lytso.code.data.voice.VoiceCallLauncher.consumePending()) return@collect
+            when {
+                lytso.code.data.voice.AgyVoiceCall.state.value.active -> lytso.code.data.voice.AgyVoiceCall.setMinimized(false)
+                !serverUp -> lytso.code.ui.components.AppToastHelper.showToast(
+                    "Start the server to call Antigravity.", lytso.code.ui.components.ChatToastType.ERROR
+                )
+                else -> {
+                    viewModel.openLastCallChat()
+                    startVoiceCallNow()
+                }
+            }
+        }
     }
     // the model picked for the chat changed during the call: the agent plans with it from now on
     LaunchedEffect(agyPickedModel, voiceCall.inCall) {
@@ -934,9 +975,14 @@ fun ChatScreen(
     openVoiceTranscript?.let { rec ->
         lytso.code.ui.voice.AgyVoiceTranscriptSheet(rec) { openVoiceTranscript = null }
     }
-    val feedItems = remember(messages, selectedModelId, modelNameOf, voiceCallItems) {
+    // the step pills the user opened (Settings → Appearance → Group Agent Steps): only for this visit of this chat,
+    // so another chat (or coming back) starts with every pill closed
+    val openStepGroups = remember(currentConv?.id) { mutableStateMapOf<String, Boolean>() }
+    val expandedStepGroups = openStepGroups.keys.toSet()
+    val feedItems = remember(messages, selectedModelId, modelNameOf, voiceCallItems, groupAgentSteps, groupStepsMin, expandedStepGroups) {
         // the date and model dividers are always on
-        ChatFeedCache.buildFeedItems(messages, selectedModelId, dividers = true, modelName = modelNameOf, voiceCalls = voiceCallItems)
+        val items = ChatFeedCache.buildFeedItems(messages, selectedModelId, dividers = true, modelName = modelNameOf, voiceCalls = voiceCallItems)
+        StepGroups.apply(items, groupAgentSteps, groupStepsMin, expandedStepGroups, messages)
     }
 
     // Fresh LazyListState per conversation — restores saved position if returning, or initializes directly at bottom
@@ -1597,11 +1643,12 @@ fun ChatScreen(
             )
         }
         agyLoginIssue?.let { issue ->
+            val verifyUrl = issue.verificationUrl
             AlertDialog(
                 onDismissRequest = { viewModel.clearAgyLoginIssue() },
                 title = {
                     Text(
-                        text = "Account Verification Required",
+                        text = if (verifyUrl != null) "Account Verification Required" else "Can't sign in to Antigravity",
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp
                     )
@@ -1614,28 +1661,39 @@ fun ChatScreen(
                     )
                 },
                 confirmButton = {
-                    Button(
-                        onClick = {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(issue.verificationUrl)).apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (verifyUrl != null) {
+                        Button(
+                            onClick = {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(verifyUrl)).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("ChatScreen", "Failed to open browser: ${e.message}")
                                 }
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                android.util.Log.e("ChatScreen", "Failed to open browser: ${e.message}")
-                            }
-                            viewModel.clearAgyLoginIssue()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
-                    ) {
-                        Text("Verify Account", fontWeight = FontWeight.SemiBold)
+                                viewModel.clearAgyLoginIssue()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
+                        ) {
+                            Text("Verify Account", fontWeight = FontWeight.SemiBold)
+                        }
+                    } else {
+                        Button(
+                            onClick = { viewModel.clearAgyLoginIssue() },
+                            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = MaterialTheme.colorScheme.onPrimary)
+                        ) {
+                            Text("OK", fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 },
-                dismissButton = {
-                    TextButton(onClick = { viewModel.clearAgyLoginIssue() }) {
-                        Text("Cancel")
+                dismissButton = if (verifyUrl != null) {
+                    {
+                        TextButton(onClick = { viewModel.clearAgyLoginIssue() }) {
+                            Text("Cancel")
+                        }
                     }
-                }
+                } else null
             )
         }
         Scaffold(
@@ -1701,12 +1759,20 @@ fun ChatScreen(
                             modifier = Modifier.fillMaxWidth().padding(end = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // long-press the title: this chat on the home screen (an icon, or a widget)
+                            var titleMenuOpen by remember { mutableStateOf(false) }
+                            Box(Modifier.weight(1f)) {
                             // the real title fades in when the chat gets one (instead of jumping from "New Chat")
                             Crossfade(
                                 targetState = displayedChatTitle,
                                 animationSpec = tween(250),
                                 label = "chat_title",
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.pointerInput(currentConv?.id, isChatStarted) {
+                                    detectTapGestures(onLongPress = {
+                                        val conv = currentConv
+                                        if (conv != null && isChatStarted && !conv.readOnly && !isInFloatingWindow) titleMenuOpen = true
+                                    })
+                                }
                             ) { chatTitle ->
                                 Text(
                                     text = chatTitle,
@@ -1716,6 +1782,37 @@ fun ChatScreen(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                            }
+                            DropdownMenu(expanded = titleMenuOpen, onDismissRequest = { titleMenuOpen = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Add to home screen") },
+                                    leadingIcon = { Icon(Icons.Outlined.AppShortcut, null, modifier = Modifier.size(18.dp)) },
+                                    onClick = {
+                                        titleMenuOpen = false
+                                        currentConv?.let { lytso.code.data.homescreen.HomeShortcuts.pinChat(context, it.id, it.agent, displayedChatTitle) }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Add as a widget") },
+                                    leadingIcon = { Icon(Icons.Outlined.Widgets, null, modifier = Modifier.size(18.dp)) },
+                                    onClick = {
+                                        titleMenuOpen = false
+                                        val conv = currentConv
+                                        if (conv != null) {
+                                            if (lytso.code.ui.homescreen.HomeWidgets.canPin(context)) {
+                                                lytso.code.ui.homescreen.HomeWidgets.pin(
+                                                    context, lytso.code.ui.homescreen.WidgetKind.CHAT, Triple(conv.id, conv.agent, displayedChatTitle)
+                                                )
+                                            } else {
+                                                lytso.code.ui.components.AppToastHelper.showToast(
+                                                    "Long-press your home screen → Widgets → LytsoCoder → One chat",
+                                                    lytso.code.ui.components.ChatToastType.INFO
+                                                )
+                                            }
+                                        }
+                                    }
+                                )
+                            }
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                             Box {
@@ -2022,6 +2119,12 @@ fun ChatScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
+                        .onGloballyPositioned { coords ->
+                            // This box ends where the input area starts; the jump button sits 12dp + 38dp above that.
+                            // Y only: the chat is hidden by moving it sideways, which doesn't change it.
+                            val bottomY = coords.localToRoot(Offset(0f, coords.size.height.toFloat())).y
+                            onBottomAreaTopChanged(bottomY - with(density) { (12 + 38).dp.toPx() })
+                        }
                 ) {
                     val sysStatus = systemConnectionState.status
                     val isServerInitializing = sysStatus == lytso.code.data.remote.SystemStatus.STARTING || sysStatus == lytso.code.data.remote.SystemStatus.ACQUIRING_CSRF || (sysStatus == lytso.code.data.remote.SystemStatus.OFFLINE && isInitialGracePeriod)
@@ -2411,9 +2514,15 @@ fun ChatScreen(
                                         // with the working animation on, the working row below replaces these dots
                                         // progress shows in the working row under the reply (the working animation is always on)
                                         is ChatFeedItem.AssistantTyping -> Unit
+                                        is ChatFeedItem.StepGroup -> StepGroupPill(
+                                            group = feedItem,
+                                            onToggle = { if (openStepGroups.remove(feedItem.key) == null) openStepGroups[feedItem.key] = true },
+                                            modifier = Modifier.padding(horizontal = 16.dp)
+                                        )
                                         is ChatFeedItem.AssistantFooter -> {
                                             AssistantMessageFooter(
                                                 message = feedItem.message,
+                                                showStats = showMessageStats,
                                                 // fades in where the working row fades out (no pop-in at the end of a turn)
                                                 modifier = Modifier.animateItem(fadeInSpec = tween(220), placementSpec = null, fadeOutSpec = null),
                                                 isDevModeEnabled = isDevModeEnabled,
@@ -2438,6 +2547,7 @@ fun ChatScreen(
                                             MessageBubble(
                                                 message = feedItem.message,
                                                 modelId = selectedModelId,
+                                                showStats = showMessageStats,
                                                 isDevModeEnabled = isDevModeEnabled,
                                                 onApproveTool = { toolCall, msgId ->
                                                     viewModel.approveAndExecuteTerminalTool(toolCall, msgId)
@@ -3246,6 +3356,8 @@ fun ChatScreen(
             floatingSwitcherItems = floatingSwitcherItems,
             floatingSwitcherAutoCollapseSec = floatingSwitcherAutoCollapseSec,
             onSetFloatingSwitcherOrientation = { viewModel.setFloatingSwitcherOrientation(it) },
+            floatingSwitcherHandleIcon = floatingSwitcherHandleIcon,
+            onSetFloatingSwitcherHandleIcon = { viewModel.setFloatingSwitcherHandleIcon(it) },
             onSetFloatingSwitcherItems = { viewModel.setFloatingSwitcherItems(it) },
             onSetFloatingSwitcherAutoCollapseSec = { viewModel.setFloatingSwitcherAutoCollapseSec(it) },
             onResetFloatingSwitcherPosition = { viewModel.resetFloatingSwitcherPosition() },
@@ -3275,8 +3387,12 @@ fun ChatScreen(
             onAddPermissionRule = { action, pattern, decision -> viewModel.addGlobalPermissionGrant(action, pattern, decision) },
             onRemovePermissionRule = { rawRule -> viewModel.removeGlobalPermissionGrant(rawRule) },
             onChangePermissionRuleDecision = { rawRule, newDecision -> viewModel.changeGlobalPermissionGrantDecision(rawRule, newDecision) },
-            groupChatsByWorkspace = groupChatsByWorkspace,
-            onToggleGroupChatsByWorkspace = { viewModel.setGroupChatsByWorkspace(it) },
+            groupAgentSteps = groupAgentSteps,
+            onToggleGroupAgentSteps = { viewModel.setGroupAgentSteps(it) },
+            groupStepsMin = groupStepsMin,
+            onSetGroupStepsMin = { viewModel.setGroupStepsMin(it) },
+            showMessageStats = showMessageStats,
+            onToggleShowMessageStats = { viewModel.setShowMessageStats(it) },
             isFloatingDiagnosticsEnabled = isFloatingDiagnosticsEnabled,
             onToggleFloatingDiagnostics = { viewModel.setFloatingDiagnosticsEnabled(it) },
             isNetworkInspectorEnabled = isNetworkInspectorEnabled,
@@ -3657,6 +3773,12 @@ fun ChatScreen(
 
 
     // Fully Working Local Terminal (Termux Shell with close button above)
+    // the terminal drawer's gear: close the terminal, show Settings → Terminal
+    val openTerminalSettingsFromTerminal: () -> Unit = {
+        showLocalTerminalDialog = false
+        requestedSettingsSection = lytso.code.ui.settings.SettingsSection.TERMINAL
+        showSettingsDialog = true
+    }
     if (showLocalTerminalDialog) {
         if (isInFloatingWindow) {
             Surface(
@@ -3666,12 +3788,14 @@ fun ChatScreen(
                 color = MaterialTheme.colorScheme.background
             ) {
                 LocalTerminalContent(
-                    onClose = { showLocalTerminalDialog = false }
+                    onClose = { showLocalTerminalDialog = false },
+                    onOpenSettings = openTerminalSettingsFromTerminal
                 )
             }
         } else {
             LocalTerminalDialog(
-                onDismiss = { showLocalTerminalDialog = false }
+                onDismiss = { showLocalTerminalDialog = false },
+                onOpenSettings = openTerminalSettingsFromTerminal
             )
         }
     }
@@ -4161,6 +4285,9 @@ fun ChatScreen(
             onDismiss = { showNetworkInspectorDialog = false }
         )
     }
+
+    // Connect to PC: a PC in use that cannot be reached after the app opened asks what to do
+    if (pcConnectEnabled) lytso.code.ui.pc.PcUnreachablePrompt()
 
     // Connect to PC: the side bar's sheet (switch PC, add one, back to this phone)
     if (showPcSheet) {

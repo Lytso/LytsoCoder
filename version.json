@@ -1,11 +1,14 @@
 {
-  "version_code": 147,
-  "version_name": "2.0.16",
+  "version_code": 148,
+  "version_name": "2.0.17",
   "min_supported_version_code": 2,
   "changelog": [
-    "Dedicated OpenCode vs. Antigravity System Prompt system: OpenCode chats now use their own live system prompt (per-chat override + isolated OpenCode Global prompt) via a zero-dependency OpenCode V2 bridge plugin without ever inheriting Antigravity's prompt or duplicating prompts into user input (contents)",
-    "Exclusive OpenCode systemInstruction: setting a per-chat or global OpenCode system prompt replaces the entire systemInstruction with ONLY your instructions (removing OpenCode's extra boilerplate, # Code Mode dump, and worktree notices) while permanently disabling OpenCode's # Your Model identity block (-opencode.prompt.identity)",
-    "Maximized full-screen Chat System Prompt dialog (edge-to-edge width/height with IME support), clearer Active Prompt vs. Edit Override layout, scope switcher (This chat / Global), and live character & token counter"
+    "Synced all upstream improvements from Santoshkurmi/antigem through 57a71e4 while preserving 100% of LytsoCoder features, branding, ports, AI permissions, and isolated OpenCode/Antigravity System Prompt architecture",
+    "OpenCode model variants, thinking effort levels & dynamic model capabilities discovery (capabilities.go, OpenCodeChatBackend, OpenCodeChatUi, OpenCodeSettingsScreen) alongside LytsoCoder's live exclusive systemInstruction plugin",
+    "Full Ubuntu chroot runtime support (ChrootManager, ChrootInstaller, X11, REA, Android Dev, and dedicated -chroot APK build)",
+    "Shizuku & Root device access modes alongside ADB (DeviceAccess, ShizukuShell, RootShell)",
+    "Home screen widgets (Chats, Quick actions, One chat, Scripts) & app shortcuts, Jarvis floating orb, floating Voice Call window & QS tile",
+    "Agent step grouping pill (configurable minimum steps), optional message stats toggle, floating switcher icon customization & Page Overview, Terminal Sessions Drawer & emulator/input fixes, enhanced Notes scrolling, custom back-to-background navigation, Android 7/8 (API 24/25) core library desugaring & fallback launcher icons, and beta update channel support"
   ],
   "is_critical": false
 }
