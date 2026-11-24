@@ -104,7 +104,15 @@ data class ChatMessage(
     /** Transcript entry UUID for fork-at / in-place edit (Claude/OpenCode). */
     val entryUuid: String? = null,
     /** Transcript entry UUID holding editable visible text in a multi-entry assistant turn (Claude). */
-    val editableEntryUuid: String? = null
+    val editableEntryUuid: String? = null,
+    /** Individual assistant text segments (stepIndex -> clean text) so beginning/middle replies get full Edit/Fork/Copy controls. */
+    val textSegments: List<AssistantTextSegment> = emptyList()
+)
+
+@Serializable
+data class AssistantTextSegment(
+    val stepIndex: Int,
+    val text: String
 )
 
 @Serializable

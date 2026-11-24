@@ -183,11 +183,32 @@ object ChatFeedCache {
                 }
                 if (contentToParse.isNotEmpty() || msg.toolCalls.isNotEmpty()) {
                     val blocks = parseMarkdownBlocks(contentToParse, msg.toolCalls)
+                    val segByStep = msg.textSegments.associateBy { it.stepIndex }
                     for (i in blocks.indices) {
+                        val b = blocks[i]
+                        if (b is MarkdownBlock.StepFooter) {
+                            val seg = segByStep[b.stepIndex]
+                            if (seg != null && seg.text.isNotBlank()) {
+                                val segMsg = msg.copy(
+                                    id = "${msg.id}_seg_${seg.stepIndex}",
+                                    content = seg.text,
+                                    thoughtText = null,
+                                    toolCalls = emptyList(),
+                                    tokenUsage = null,
+                                    stepIndex = seg.stepIndex,
+                                    forkStepIndex = seg.stepIndex,
+                                    editableStepIndex = seg.stepIndex,
+                                    editableText = seg.text,
+                                    textSegments = emptyList()
+                                )
+                                msgItems.add(ChatFeedItem.AssistantFooter(segMsg))
+                            }
+                            continue
+                        }
                         msgItems.add(ChatFeedItem.AssistantBlock(
                             messageId = msg.id,
                             blockIndex = i,
-                            block = blocks[i],
+                            block = b,
                             isFirst = i == 0,
                             isLast = i == blocks.lastIndex
                         ))

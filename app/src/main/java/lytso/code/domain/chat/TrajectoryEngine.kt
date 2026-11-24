@@ -735,6 +735,8 @@ class TrajectoryEngine {
                     var maxDuration: Long? = null
                     val toolCalls = mutableListOf<ToolCall>()
                     val contentParts = mutableListOf<String>()
+                    val textSegments = mutableListOf<lytso.code.domain.model.AssistantTextSegment>()
+                    val lastTextBlock = turn.blocks.lastOrNull { it is TurnBlock.Text && it.markdown.isNotBlank() } as? TurnBlock.Text
 
                     for (block in turn.blocks) {
                         when (block) {
@@ -752,7 +754,13 @@ class TrajectoryEngine {
                             }
                             is TurnBlock.Text -> {
                                 if (block.markdown.isNotBlank()) {
-                                    contentParts.add(block.markdown.trim())
+                                    val cleanText = block.markdown.trim()
+                                    contentParts.add(cleanText)
+                                    textSegments.add(lytso.code.domain.model.AssistantTextSegment(stepIndex = block.stepIndex, text = cleanText))
+                                    // Emit an inline footer marker for beginning/middle replies so they get full Edit, Fork & Copy controls
+                                    if (lastTextBlock != null && block.stepIndex != lastTextBlock.stepIndex) {
+                                        contentParts.add("<!-- step_footer:${block.stepIndex} -->")
+                                    }
                                 }
                             }
                             is TurnBlock.Tool -> {
@@ -825,7 +833,6 @@ class TrajectoryEngine {
                     }
                     seenMsgIds.add(aId)
 
-                    val lastTextBlock = turn.blocks.lastOrNull { it is TurnBlock.Text && it.markdown.isNotBlank() } as? TurnBlock.Text
                     val maxStep = turn.blocks.maxOfOrNull { it.stepIndex }
                     val firstStep = turn.blocks.firstOrNull()?.stepIndex
 
@@ -844,7 +851,8 @@ class TrajectoryEngine {
                             modelId = turn.modelId,
                             forkStepIndex = maxStep,
                             editableStepIndex = lastTextBlock?.stepIndex,
-                            editableText = lastTextBlock?.markdown?.trim()
+                            editableText = lastTextBlock?.markdown?.trim(),
+                            textSegments = textSegments
                         )
                     )
                 }

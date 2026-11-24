@@ -2225,9 +2225,21 @@ class AgyChatBackend(
         val role = if (message.role == MessageRole.USER) "user" else "assistant"
         val previousText = message.content
 
-        // Optimistic UI: update local message text immediately and close the editor with zero latency
+        // Optimistic UI: update local message text immediately (supports both final replies and intermediate _seg_ replies)
+        val parentId = message.id.substringBefore("_seg_")
+        val oldSegText = message.editableText?.takeIf { it.isNotBlank() } ?: message.content
         _messages.value = _messages.value.map { msg ->
-            if (msg.id == message.id) msg.copy(content = newText) else msg
+            when {
+                msg.id == message.id -> msg.copy(content = newText, editableText = newText)
+                msg.id == parentId && oldSegText.isNotBlank() -> msg.copy(
+                    content = msg.content.replaceFirst(oldSegText, newText),
+                    textSegments = msg.textSegments.map { seg ->
+                        if (seg.stepIndex == stepIdx) seg.copy(text = newText) else seg
+                    },
+                    editableText = if (msg.editableStepIndex == stepIdx) newText else msg.editableText
+                )
+                else -> msg
+            }
         }
         onDone(true, null)
 
