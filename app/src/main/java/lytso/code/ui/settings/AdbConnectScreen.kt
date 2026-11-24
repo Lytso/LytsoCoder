@@ -61,7 +61,7 @@ fun AdbConnectScreen(cardBg: Color, cardBorder: BorderStroke) {
 
 /** ADB, Shizuku or root: what Android Automation uses. In chat, any of them that is set up can be asked for. */
 @Composable
-private fun ModePicker(mode: DeviceAccess.Mode, cardBg: Color, cardBorder: BorderStroke) {
+internal fun ModePicker(mode: DeviceAccess.Mode, cardBg: Color, cardBorder: BorderStroke) {
     val modes = DeviceAccess.Mode.entries
     val su = if (AdbConnectManager.inChroot) "android-su -c" else "su -c"
     Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
@@ -91,7 +91,7 @@ private fun ModePicker(mode: DeviceAccess.Mode, cardBg: Color, cardBorder: Borde
 
 /** ADB mode: the terminal's adb, connected to this phone over Wireless debugging. */
 @Composable
-private fun AdbSection(cardBg: Color, cardBorder: BorderStroke) {
+internal fun AdbSection(cardBg: Color, cardBorder: BorderStroke) {
     val context = LocalContext.current
     val state by AdbConnectManager.state.collectAsState()
 
@@ -311,7 +311,7 @@ private fun AdbSection(cardBg: Color, cardBorder: BorderStroke) {
 
 /** Shizuku mode: commands go through the Shizuku app, as the shell user (or root when Shizuku runs as root). */
 @Composable
-private fun ShizukuSection(cardBg: Color, cardBorder: BorderStroke) {
+internal fun ShizukuSection(cardBg: Color, cardBorder: BorderStroke) {
     val context = LocalContext.current
     val status by ShizukuShell.status.collectAsState()
     // Shizuku can be started, stopped or allowed while the user is away in its app
@@ -360,7 +360,7 @@ private fun ShizukuSection(cardBg: Color, cardBorder: BorderStroke) {
 
 /** Root mode: commands go through the phone's su. */
 @Composable
-private fun RootSection(cardBg: Color, cardBorder: BorderStroke) {
+internal fun RootSection(cardBg: Color, cardBorder: BorderStroke) {
     val scope = rememberCoroutineScope()
     val state by RootShell.state.collectAsState()
     val (icon, tint, title, subtitle) = when (state.check) {

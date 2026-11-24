@@ -120,7 +120,7 @@ enum class SettingsSection(val title: String, val subtitle: String) {
     AGENTS("Agents", "Run Antigravity, Claude Code, OpenCode, Codex or several"),
     GLOBAL_SYSTEM_PROMPT("Prompts & Context", "Identity, Built-in environment & custom rules"),
     GLOBAL_CONTEXT("Prompts & Context", "Identity, Built-in environment & custom rules"),
-    AI_PERMISSIONS("AI Permissions & Root", "Root access (Termux), capabilities & explorer directories"),
+    AI_PERMISSIONS("AI Permissions, Root & ADB", "Root, ADB, Shizuku, capabilities, tool blocker & explorer"),
     AGENT_MEMORY("Agent memory & history", "Memories every agent keeps across chats, and past chats they can look up"),
     AGENT_HISTORY("Saved chats", "The chat history the agents can look up: read, edit or remove it"),
     JARVIS("Jarvis", "Hands-free voice control of the whole app"),
@@ -137,7 +137,7 @@ enum class SettingsSection(val title: String, val subtitle: String) {
     DIAGNOSTICS("Diagnostics & Performance", "Live network connections, active streams & thread HUD"),
     UTILITIES("Utilities", "Handy device tools"),
     GITHUB("GitHub", "Sign in with the GitHub CLI, your repositories and git credentials"),
-    ADB_CONNECT("ADB Connect", "Shell access to this phone through adb (Wireless debugging), Shizuku or root"),
+    ADB_CONNECT("AI Permissions, Root & ADB", "Root, ADB, Shizuku, capabilities, tool blocker & explorer"),
     ANDROID_AUTOMATION("Android Automation", "Let AI agents see and control this phone"),
     REA("REA · Reverse Engineering", "Let agents analyze APKs, Flutter, React Native and native code"),
     REA_GROUPS("REA Tool Groups", "Which REA tools each REA MCP server shows"),
@@ -828,9 +828,10 @@ fun SettingsDialog(
                             onDismiss()
                         }
                     )
-                    SettingsSection.ADB_CONNECT -> AdbConnectScreen(
+                    SettingsSection.ADB_CONNECT -> AiPermissionsAndExplorerScreen(
                         cardBg = cardBg,
-                        cardBorder = cardBorder
+                        cardBorder = cardBorder,
+                        initialTab = 0
                     )
                     SettingsSection.ANDROID_AUTOMATION -> AndroidAutomationScreen(
                         cardBg = cardBg,
@@ -1091,7 +1092,9 @@ private fun MainSettingsMenu(
                         SettingsSection.AI_PERMISSIONS,
                         Icons.Outlined.AdminPanelSettings,
                         c.danger,
-                        subtitle = "Root (Termux), capabilities & explorer folders"
+                        value = deviceTools.adb.value,
+                        valueColor = deviceTools.adb.valueColor,
+                        subtitle = "Root, ADB, Shizuku, tool blocker & explorer"
                     ),
                     row(SettingsSection.AGENTS, Icons.Outlined.SmartToy, MaterialTheme.colorScheme.primary, when {
                         enabledAgents.size == lytso.code.domain.model.AgentKind.entries.size -> "All agents"
@@ -1144,7 +1147,6 @@ private fun MainSettingsMenu(
                         if (useSshTerminal || lytso.code.data.preferences.AuthPreferences.currentRemoteMode) "SSH" else "Local",
                         subtitle = "Shell, SSH, local tools & styling"),
                     githubRow,
-                    deviceTools.adb,
                     deviceTools.automation,
                     reaRow,
                     androidDevRow,

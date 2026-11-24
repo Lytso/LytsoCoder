@@ -42,8 +42,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import kotlinx.coroutines.launch
 import lytso.code.data.remote.HubMediaResolver
 import lytso.code.data.remote.dto.AskQuestionResponseItemDto
+import lytso.code.data.security.AiPermissionsClient
 import lytso.code.domain.model.ToolCall
 import lytso.code.domain.model.ToolType
 import lytso.code.theme.*
@@ -140,7 +142,8 @@ fun AgentToolCallCard(
         isRunning && isGenImg -> "Generating image..."
         isRunning && isMcp -> "Executing MCP tool..."
         isRunning && isSystemNotice -> "System event..."
-        isRunning -> "Executing in Termux..."
+        isRunning && isBash -> "Executing in Termux..."
+        isRunning -> "Running tool..."
 
         isSuccess && isSystemNotice -> "System:"
         isSuccess && isSearch -> "Web search"
@@ -152,7 +155,8 @@ fun AgentToolCallCard(
         isSuccess && (isFind || isGrep) -> "Searched code"
         isSuccess && isGenImg -> "Generated image"
         isSuccess && isMcp -> "MCP tool"
-        isSuccess -> "Ran bash"
+        isSuccess && isBash -> "Ran bash"
+        isSuccess -> "Ran tool"
 
         isTerminated -> "Stopped:"
         isRejected -> "Rejected:"
@@ -213,7 +217,8 @@ fun AgentToolCallCard(
                 isFind || isGrep -> Icons.Default.Search
                 isGenImg -> Icons.Default.Image
                 isMcp -> Icons.Default.Build
-                else -> Icons.Default.Terminal
+                isBash -> Icons.Default.Terminal
+                else -> Icons.Default.Build
             }
 
             // Tool / State Icon
@@ -285,8 +290,8 @@ fun AgentToolCallCard(
                 modifier = Modifier.weight(1f)
             )
 
-            // Pristine Circular Terminate (Stop) Button while Running
-            if (isRunning && onTerminate != null && isBash) {
+            // Pristine Circular Terminate (Stop) Button while Running (works for ANY tool, not just bash)
+            if (isRunning && onTerminate != null && !isSystemNotice) {
                 Box(
                     modifier = Modifier
                         .size(22.dp)
@@ -536,6 +541,39 @@ fun AgentToolCallCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier.padding(horizontal = 6.dp)
                             )
+                        }
+
+                        if (!isSystemNotice) {
+                            val permState by AiPermissionsClient.state.collectAsState()
+                            val blockScope = rememberCoroutineScope()
+                            val blockKey = remember(toolCall.name, toolCall.command, isMcp) {
+                                if (isMcp && toolCall.command.isNotBlank()) toolCall.command.trim().lowercase()
+                                else toolCall.name.ifBlank { toolCall.command }.trim().lowercase()
+                            }
+                            val isBlocked = blockKey.isNotBlank() && blockKey in permState.policy.blockedTools
+                            IconButton(
+                                onClick = {
+                                    if (blockKey.isBlank()) return@IconButton
+                                    blockScope.launch {
+                                        if (isBlocked) {
+                                            AiPermissionsClient.unblockTool(blockKey)
+                                            Toast.makeText(context, "Unblocked $blockKey", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            AiPermissionsClient.blockTool(blockKey)
+                                            if (isRunning) onTerminate?.invoke(toolCall)
+                                            Toast.makeText(context, "Blocked $blockKey (auto-interrupt active)", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Block,
+                                    contentDescription = if (isBlocked) "Unblock tool" else "Block tool",
+                                    tint = if (isBlocked) lytso.code.theme.AppColors.danger else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
                         }
 
                         IconButton(

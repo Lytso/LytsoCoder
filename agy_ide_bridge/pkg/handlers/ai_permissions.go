@@ -13,11 +13,12 @@ import (
 
 // AiPermissionPolicy mirrors the user's modular AI capability switches stored at ~/.lytsocoder/ai_permissions.json.
 type AiPermissionPolicy struct {
-	AllowRoot      bool `json:"allowRoot"`
-	AllowAllFiles  bool `json:"allowAllFiles"`
-	AllowShellExec bool `json:"allowShellExec"`
-	AllowFileWrite bool `json:"allowFileWrite"`
-	AllowNetwork   bool `json:"allowNetwork"`
+	AllowRoot      bool     `json:"allowRoot"`
+	AllowAllFiles  bool     `json:"allowAllFiles"`
+	AllowShellExec bool     `json:"allowShellExec"`
+	AllowFileWrite bool     `json:"allowFileWrite"`
+	AllowNetwork   bool     `json:"allowNetwork"`
+	BlockedTools   []string `json:"blockedTools"`
 }
 
 func defaultAiPermissionPolicy() AiPermissionPolicy {
@@ -27,7 +28,28 @@ func defaultAiPermissionPolicy() AiPermissionPolicy {
 		AllowShellExec: true,
 		AllowFileWrite: true,
 		AllowNetwork:   true,
+		BlockedTools:   []string{},
 	}
+}
+
+func normalizeBlockedTools(in []string) []string {
+	if len(in) == 0 {
+		return []string{}
+	}
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, raw := range in {
+		name := strings.ToLower(strings.TrimSpace(raw))
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	return out
 }
 
 func aiRootEnabledFlagPath() string {
@@ -53,7 +75,7 @@ func SyncAiRootGuardFiles(allowRoot bool, suPath string) {
 	suShim := `#!/system/bin/sh
 FLAG="$HOME/.lytsocoder/root_enabled"
 if [ ! -f "$FLAG" ]; then
-  echo "[LytsoCoder Policy] Root access is DISABLED for AI agents. Enable it in Settings -> AI Permissions & Root." >&2
+  echo "[LytsoCoder Policy] Root access is DISABLED for AI agents. Enable it in Settings -> AI Permissions, Root & ADB." >&2
   exit 126
 fi
 REAL_SU="$(cat "$FLAG" 2>/dev/null | tr -d '\r\n')"
@@ -74,7 +96,7 @@ exec "$REAL_SU" "$@"
 	sudoShim := `#!/system/bin/sh
 FLAG="$HOME/.lytsocoder/root_enabled"
 if [ ! -f "$FLAG" ]; then
-  echo "[LytsoCoder Policy] Root access (sudo) is DISABLED for AI agents. Enable it in Settings -> AI Permissions & Root." >&2
+  echo "[LytsoCoder Policy] Root access (sudo) is DISABLED for AI agents. Enable it in Settings -> AI Permissions, Root & ADB." >&2
   exit 126
 fi
 REAL_SU="$(cat "$FLAG" 2>/dev/null | tr -d '\r\n')"
@@ -98,7 +120,7 @@ exec "$REAL_SU" -c "$*"
 	tsuShim := `#!/system/bin/sh
 FLAG="$HOME/.lytsocoder/root_enabled"
 if [ ! -f "$FLAG" ]; then
-  echo "[LytsoCoder Policy] Root access (tsu) is DISABLED for AI agents. Enable it in Settings -> AI Permissions & Root." >&2
+  echo "[LytsoCoder Policy] Root access (tsu) is DISABLED for AI agents. Enable it in Settings -> AI Permissions, Root & ADB." >&2
   exit 126
 fi
 if [ -n "$PREFIX" ] && [ -x "$PREFIX/bin/tsu" ]; then
@@ -141,10 +163,12 @@ func LoadAiPermissionPolicy() AiPermissionPolicy {
 		return p
 	}
 	_ = json.Unmarshal(raw, &p)
+	p.BlockedTools = normalizeBlockedTools(p.BlockedTools)
 	return p
 }
 
 func saveAiPermissionPolicy(p AiPermissionPolicy) error {
+	p.BlockedTools = normalizeBlockedTools(p.BlockedTools)
 	path := aiPermissionsFilePath()
 	if path == "" {
 		return nil

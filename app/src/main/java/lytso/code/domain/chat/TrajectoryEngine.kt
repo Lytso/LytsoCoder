@@ -939,6 +939,32 @@ class TrajectoryEngine {
             return
         }
 
+        // Skip internal non-tool bookkeeping steps that previously leaked into the UI as "Ran bash unknown_tool"
+        if (step.requested_interaction == null && step.metadata?.tool_call?.name.isNullOrBlank()) {
+            when (step.type) {
+                CortexStepType.CORTEX_STEP_TYPE_UNSPECIFIED,
+                CortexStepType.CORTEX_STEP_TYPE_DUMMY,
+                CortexStepType.CORTEX_STEP_TYPE_FINISH,
+                CortexStepType.CORTEX_STEP_TYPE_CHECKPOINT,
+                CortexStepType.CORTEX_STEP_TYPE_EPHEMERAL_MESSAGE,
+                CortexStepType.CORTEX_STEP_TYPE_CONVERSATION_HISTORY,
+                CortexStepType.CORTEX_STEP_TYPE_KNOWLEDGE_ARTIFACTS,
+                CortexStepType.CORTEX_STEP_TYPE_KNOWLEDGE_GENERATION,
+                CortexStepType.CORTEX_STEP_TYPE_BRAIN_UPDATE,
+                CortexStepType.CORTEX_STEP_TYPE_TASK_BOUNDARY,
+                CortexStepType.CORTEX_STEP_TYPE_NOTIFY_USER,
+                CortexStepType.CORTEX_STEP_TYPE_MEMORY,
+                CortexStepType.CORTEX_STEP_TYPE_RETRIEVE_MEMORY,
+                CortexStepType.CORTEX_STEP_TYPE_SUGGESTED_RESPONSES,
+                CortexStepType.CORTEX_STEP_TYPE_COMMAND_STATUS,
+                CortexStepType.CORTEX_STEP_TYPE_MANAGER_FEEDBACK,
+                CortexStepType.CORTEX_STEP_TYPE_CODE_ACKNOWLEDGEMENT,
+                CortexStepType.CORTEX_STEP_TYPE_WAIT,
+                CortexStepType.CORTEX_STEP_TYPE_CIDER_AGENT_DUMMY -> return
+                else -> Unit
+            }
+        }
+
         val toolCall = extractToolCallFromStep(step, stepIndex)
         if (toolCall != null) {
             blocks.add(TurnBlock.Tool(stepIndex = stepIndex, toolCall = toolCall))
@@ -1002,6 +1028,17 @@ class TrajectoryEngine {
 
         val toolId = stepIndex.toString()
         val fullOutputUri = step.generic?.result?.full_output_uri
+
+        // Drop ghost unknown_tool steps that carry no real tool metadata, args, interaction or output
+        if (toolType == ToolType.UNKNOWN &&
+            rawName == "unknown_tool" &&
+            tcMeta?.name.isNullOrBlank() &&
+            argsMap.isEmpty() &&
+            step.requested_interaction == null &&
+            fullOutputUri.isNullOrBlank()
+        ) {
+            return null
+        }
 
         val runCmd = step.run_command
         val codeAct = step.code_action

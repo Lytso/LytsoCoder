@@ -183,6 +183,52 @@ class AgyChatBackend(
     private val _isLoadingConversation = MutableStateFlow(true)
     override val isLoadingConversation: StateFlow<Boolean> = _isLoadingConversation.asStateFlow()
 
+    /** Tracks (conversationId:stepIndex) already auto-interrupted by blocked-tool policy to avoid duplicate RPCs. */
+    private val autoBlockedStepKeys = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * Abruptly interrupts any active tool call that matches the user's blocked-tools or modular capability policy,
+     * whether triggered during or after a response, letting the AI continue seamlessly without stalling.
+     */
+    private fun enforceBlockedToolPolicy(conversationId: String, msgs: List<ChatMessage>, hubUrl: String) {
+        if (msgs.isEmpty()) return
+        for (msg in msgs) {
+            for (tc in msg.toolCalls) {
+                val stepIndex = tc.stepIndex ?: continue
+                val isActive = tc.status == "RUNNING" || tc.status == "PENDING_APPROVAL"
+                if (!isActive) continue
+                if (!lytso.code.data.security.AiPermissionsClient.isToolBlocked(tc.name, tc.toolType, tc.command)) continue
+                val key = "$conversationId:$stepIndex"
+                if (!autoBlockedStepKeys.add(key)) continue
+
+                Log.w("ChatViewModel", "⛔ Auto-interrupting blocked tool '${tc.name}' (${tc.command}) at step $stepIndex in $conversationId")
+                if (tc.status == "PENDING_APPROVAL") {
+                    rejectTerminalTool(
+                        tc,
+                        msg.id,
+                        "Tool '${tc.name}' is blocked by user policy. Continue your response without calling it."
+                    )
+                } else {
+                    trajectoryEngine.optimisticUpdateStepStatus(
+                        stepIndex = stepIndex,
+                        status = lytso.code.data.remote.dto.CortexStepStatuses.CANCELED,
+                        output = "Tool '${tc.name}' blocked by user policy — interrupted automatically."
+                    )
+                    backendScope.launch {
+                        val res = agyHubClient.cancelCascadeSteps(
+                            cascadeId = conversationId,
+                            stepIndices = listOf(stepIndex),
+                            hubUrl = hubUrl
+                        )
+                        if (res.isFailure) {
+                            Log.e("ChatViewModel", "Auto-cancel blocked step $stepIndex failed: ${res.exceptionOrNull()?.message}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fun setModelEnabled(modelId: String, isEnabled: Boolean) {
         val currentIds = _enabledModelIds.value?.toMutableSet() ?: _availableModels.value.map { it.id }.toMutableSet()
         if (isEnabled) {
@@ -1502,6 +1548,7 @@ class AgyChatBackend(
                                     isFirstChunk = false
                                     val turns = if (update != null) trajectoryEngine.ingestAgentStateUpdate(update) else emptyList()
                                     val msgs = trajectoryEngine.toChatMessages(conversationId)
+                                    enforceBlockedToolPolicy(conversationId, msgs, hubUrl)
 
 
                                     withContext(Dispatchers.Main) {
@@ -3395,18 +3442,6 @@ class AgyChatBackend(
             output = "Command terminated by user."
         )
         _messages.value = trajectoryEngine.toChatMessages(conv.id)
-
-        // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
-        // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
-        backendScope.launch {
-            agyBridgeService.agyAccountEvents.collectLatest {
-                delay(300)
-                checkAgyAuthStatus(userInitiated = false, accountChanged = true)
-            }
-        }
-        lytso.code.data.remote.AgyAccounts.replyRunning = {
-            _activeInstances.value.isNotEmpty() || _conversations.value.any { it.isRunning }
-        }
 
         backendScope.launch {
             val hubUrl = AuthPreferences.currentHubUrl
