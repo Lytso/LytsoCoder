@@ -508,6 +508,8 @@ func main() {
 			h.PrewarmConversationHandler(w, r)
 		} else if strings.HasSuffix(path, "/steps/edit") {
 			h.EditStepHandler(w, r)
+		} else if strings.HasSuffix(path, "/steps/delete") {
+			h.DeleteStepsHandler(w, r)
 		} else if strings.HasSuffix(path, "/thinking/delete") {
 			h.DeleteThinkingHandler(w, r)
 		} else if strings.HasSuffix(path, "/artifacts/delete-batch") {

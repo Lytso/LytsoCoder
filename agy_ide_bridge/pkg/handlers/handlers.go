@@ -432,6 +432,32 @@ func (h *Handler) DeleteThinkingHandler(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"success": true, "modified": modified, "restarted": restarted, "csrfToken": h.currentHubCsrf()})
 }
 
+func (h *Handler) DeleteStepsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	convID := extractConvIDSubroute(r.URL.Path)
+	var req struct {
+		StepIndices []int `json:"stepIndices"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.StepIndices) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "stepIndices required"})
+		return
+	}
+	deleted := 0
+	restarted, err := h.runBrainMutation(func() error {
+		var mErr error
+		deleted, mErr = brainctl.DeleteSteps(h.Cfg.AppDataDir, h.Cfg.BrainDir, convID, req.StepIndices)
+		return mErr
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"success": false, "error": err.Error(), "restarted": restarted})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"success": true, "modified": deleted, "restarted": restarted, "csrfToken": h.currentHubCsrf()})
+}
+
 func (h *Handler) DeleteArtifactHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

@@ -1562,6 +1562,9 @@ class AgyChatBackend(
                                         val isRunning = trajectoryEngine.isRunning
                                         val isWaiting = trajectoryEngine.isWaitingInteraction
                                         _isStreaming.value = isRunning && !isWaiting
+                                        if (!isRunning && !isWaiting && synchronized(brainQueueLock) { hasQueuedBrainMutationsLocked() }) {
+                                            scheduleBrainQueueDrain(debounceMs = 400L)
+                                        }
                                         _streamRun.value = StreamRunState(conversationId, isRunning, trajectoryEngine.fullyIdle)
                                         _optimisticSend.value?.let { o ->
                                             // the sent message started (loop running) or already finished (its step is there)
@@ -1917,6 +1920,7 @@ class AgyChatBackend(
     private val pendingArtifactDeletes = LinkedHashMap<String, LinkedHashMap<String, lytso.code.domain.model.ArtifactSnapshot>>()
     private val pendingStepEdits = LinkedHashMap<String, LinkedHashMap<Int, PendingStepEdit>>()
     private val pendingThinkingDeletes = LinkedHashMap<String, LinkedHashSet<Int>>()
+    private val pendingStepDeletes = LinkedHashMap<String, LinkedHashSet<Int>>()
     private var brainQueueDebounceJob: Job? = null
     private var brainQueueDrainJob: Job? = null
     private var brainQueueBatchStartMs: Long = 0L
@@ -1925,7 +1929,7 @@ class AgyChatBackend(
         "${artifact.absoluteUri.trim()}|${artifact.name.trim()}"
 
     private fun hasQueuedBrainMutationsLocked(): Boolean =
-        pendingArtifactDeletes.isNotEmpty() || pendingStepEdits.isNotEmpty() || pendingThinkingDeletes.isNotEmpty()
+        pendingArtifactDeletes.isNotEmpty() || pendingStepEdits.isNotEmpty() || pendingThinkingDeletes.isNotEmpty() || pendingStepDeletes.isNotEmpty()
 
     private fun scheduleBrainQueueDrain(debounceMs: Long = 350L, maxBatchWindowMs: Long = 1500L) {
         synchronized(brainQueueLock) {
@@ -2112,6 +2116,38 @@ class AgyChatBackend(
                             lytso.code.ui.components.AppToastHelper.showToast(
                                 "Could not remove thinking step: ${res.exceptionOrNull()?.message ?: "I/O error"}",
                                 lytso.code.ui.components.ChatToastType.ERROR
+                            )
+                        }
+                    }
+                    continue
+                }
+
+                // 4. Drain batched full-step deletions (SQLite + brain step dirs + transcripts)
+                val stepDeleteBatch: Pair<String, List<Int>>? = synchronized(brainQueueLock) {
+                    val entry = pendingStepDeletes.entries.firstOrNull()
+                    if (entry != null) {
+                        pendingStepDeletes.remove(entry.key)
+                        entry.key to entry.value.toList()
+                    } else null
+                }
+                if (stepDeleteBatch != null) {
+                    val (convId, stepIndices) = stepDeleteBatch
+                    lastConvId = convId
+                    val res = executeWithRetry(maxAttempts = 2) {
+                        lytso.code.data.remote.BrainControlClient.deleteAgySteps(convId, stepIndices)
+                    }
+                    if (res.isSuccess) {
+                        val value = res.getOrThrow()
+                        anySucceeded = true
+                        if (value.restarted) anyRestarted = true
+                        if (!value.csrfToken.isNullOrBlank()) latestCsrf = value.csrfToken
+                        // Steps are now physically removed & compacted in SQLite; clear stale UI-hide indices
+                        lytso.code.data.security.HiddenToolStepsStore.clearConversation(convId)
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            lytso.code.ui.components.AppToastHelper.showToast(
+                                "Removed from view (SQLite delete failed: ${res.exceptionOrNull()?.message ?: "I/O error"})",
+                                lytso.code.ui.components.ChatToastType.INFO
                             )
                         }
                     }
@@ -3433,14 +3469,15 @@ class AgyChatBackend(
     }
 
     /**
-     * Deletes a tool card or `System:` notice from the chat UI (and persists the removal across stream updates
-     * and restarts). If the step is still running, also cancels that specific step without halting the AI.
+     * Permanently deletes a tool card or `System:` notice from UI (0ms optimistic hide) AND queues full
+     * removal from the conversation SQLite DB (`conversations/<id>.db`), brain step dirs, and transcripts.
+     * If the step is still running, cancels that specific step without halting the AI.
      */
     fun deleteToolStep(toolCall: lytso.code.domain.model.ToolCall, messageId: String) {
         val conv = _currentConversation.value ?: return
-        lytso.code.data.security.HiddenToolStepsStore.hide(conv.id, toolCall.stepIndex, toolCall.id)
-        if (toolCall.status == "RUNNING" && toolCall.stepIndex != null) {
-            val stepIndex = toolCall.stepIndex
+        val stepIndex = toolCall.stepIndex
+        lytso.code.data.security.HiddenToolStepsStore.hide(conv.id, stepIndex, toolCall.id)
+        if (toolCall.status == "RUNNING" && stepIndex != null) {
             trajectoryEngine.optimisticUpdateStepStatus(
                 stepIndex = stepIndex,
                 status = lytso.code.data.remote.dto.CortexStepStatuses.CANCELED,
@@ -3458,6 +3495,16 @@ class AgyChatBackend(
         val updated = trajectoryEngine.toChatMessages(conv.id)
         _messages.value = updated
         lytso.code.ui.chat.ChatFeedCache.prewarm(updated)
+
+        // Permanently purge the step from SQLite, brain/.system_generated/steps and transcripts when local
+        if (!conv.isCloud && stepIndex != null) {
+            synchronized(brainQueueLock) {
+                pendingStepDeletes.getOrPut(conv.id) { LinkedHashSet() }.add(stepIndex)
+            }
+            if (!_isStreaming.value) {
+                scheduleBrainQueueDrain(debounceMs = 250L)
+            }
+        }
     }
 
     fun terminateRunningTerminalTool(toolCall: lytso.code.domain.model.ToolCall, messageId: String) {

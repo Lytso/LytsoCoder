@@ -148,6 +148,18 @@ object BrainControlClient {
         }
     }
 
+    /** Permanently deletes steps from SQLite (`conversations/<id>.db`), brain step dirs and transcripts. */
+    suspend fun deleteAgySteps(
+        convId: String,
+        stepIndices: List<Int>
+    ): Result<BrainMutationResult> {
+        val body = json.encodeToString(DeleteThinkingRequest(stepIndices = stepIndices))
+        return post<BrainMutationResult>("/api/conversations/$convId/steps/delete", body).mapCatching {
+            if (!it.success) error(it.error ?: "Failed to delete steps from brain SQLite")
+            it
+        }
+    }
+
     suspend fun deleteAgyArtifact(
         convId: String,
         uri: String,

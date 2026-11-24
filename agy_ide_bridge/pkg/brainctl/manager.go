@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -164,6 +166,210 @@ func DeleteThinking(appDataDir, brainDir, convID string, stepIndices []int) (int
 		return false
 	})
 	return modified, nil
+}
+
+// DeleteSteps permanently removes the specified step indices from:
+//  1. conversations/<convID>.db (SQLite `steps` table, compacting remaining `idx` values 0..N-1 atomically),
+//  2. brain/<convID>/.system_generated/steps/<idx>/ directories (deleting removed ones and reindexing remaining),
+//  3. brain/<convID>/.system_generated/logs/transcript*.jsonl (dropping deleted entries and remapping step_index),
+//  4. conversation_summaries.db cache invalidation.
+func DeleteSteps(appDataDir, brainDir, convID string, stepIndices []int) (int, error) {
+	if len(stepIndices) == 0 {
+		return 0, nil
+	}
+	db, _, err := openConvDB(appDataDir, convID)
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+
+	targetSet := make(map[int]bool, len(stepIndices))
+	for _, idx := range stepIndices {
+		if idx >= 0 {
+			targetSet[idx] = true
+		}
+	}
+	if len(targetSet) == 0 {
+		return 0, nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+
+	// Read all existing step indices in order before deletion
+	rows, err := tx.Query(`SELECT idx FROM steps ORDER BY idx ASC`)
+	if err != nil {
+		_ = tx.Rollback()
+		return 0, err
+	}
+	var existing []int
+	for rows.Next() {
+		var idx int
+		if scanErr := rows.Scan(&idx); scanErr == nil {
+			existing = append(existing, idx)
+		}
+	}
+	rows.Close()
+
+	deletedCount := 0
+	for idx := range targetSet {
+		res, delErr := tx.Exec(`DELETE FROM steps WHERE idx = ?`, idx)
+		if delErr != nil {
+			_ = tx.Rollback()
+			return 0, delErr
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			deletedCount += int(n)
+		}
+	}
+
+	if deletedCount == 0 {
+		_ = tx.Rollback()
+		// Still prune any leftover brain step directories / transcript entries if present
+		pruneBrainStepDirs(brainDir, convID, targetSet, nil)
+		_ = pruneTranscriptSteps(brainDir, convID, targetSet, nil)
+		return 0, nil
+	}
+
+	// Build oldIdx -> newIdx compaction map for remaining steps (0..N-1)
+	remap := make(map[int]int, len(existing))
+	var remaining []int
+	for _, oldIdx := range existing {
+		if targetSet[oldIdx] {
+			continue
+		}
+		newIdx := len(remaining)
+		remap[oldIdx] = newIdx
+		remaining = append(remaining, oldIdx)
+	}
+
+	// Two-phase reindex using negative temp keys to avoid PRIMARY KEY collisions
+	for _, oldIdx := range remaining {
+		newIdx := remap[oldIdx]
+		if oldIdx == newIdx {
+			continue
+		}
+		tempIdx := -(newIdx + 1)
+		if _, err := tx.Exec(`UPDATE steps SET idx = ? WHERE idx = ?`, tempIdx, oldIdx); err != nil {
+			_ = tx.Rollback()
+			return 0, fmt.Errorf("reindex phase 1 (%d -> %d): %w", oldIdx, tempIdx, err)
+		}
+	}
+	for _, oldIdx := range remaining {
+		newIdx := remap[oldIdx]
+		if oldIdx == newIdx {
+			continue
+		}
+		tempIdx := -(newIdx + 1)
+		if _, err := tx.Exec(`UPDATE steps SET idx = ? WHERE idx = ?`, newIdx, tempIdx); err != nil {
+			_ = tx.Rollback()
+			return 0, fmt.Errorf("reindex phase 2 (%d -> %d): %w", tempIdx, newIdx, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	_, _ = db.Exec(`PRAGMA wal_checkpoint(TRUNCATE);`)
+	invalidateSummaryCache(appDataDir, convID)
+
+	// Remove deleted step folders and reindex remaining ones in brain/<convID>/.system_generated/steps/
+	pruneBrainStepDirs(brainDir, convID, targetSet, remap)
+
+	// Drop deleted steps and remap step_index in transcript.jsonl / transcript_full.jsonl
+	_ = pruneTranscriptSteps(brainDir, convID, targetSet, remap)
+
+	return deletedCount, nil
+}
+
+func pruneBrainStepDirs(brainDir, convID string, targetSet map[int]bool, remap map[int]int) {
+	if brainDir == "" {
+		return
+	}
+	stepsDir := filepath.Join(brainDir, convID, ".system_generated", "steps")
+	if fi, err := os.Stat(stepsDir); err != nil || !fi.IsDir() {
+		return
+	}
+	for idx := range targetSet {
+		_ = os.RemoveAll(filepath.Join(stepsDir, strconv.Itoa(idx)))
+	}
+	if len(remap) == 0 {
+		return
+	}
+	// Two-phase rename for remaining step dirs whose index shifted
+	var toMove []int
+	for oldIdx, newIdx := range remap {
+		if oldIdx != newIdx {
+			toMove = append(toMove, oldIdx)
+		}
+	}
+	sort.Ints(toMove)
+	for _, oldIdx := range toMove {
+		src := filepath.Join(stepsDir, strconv.Itoa(oldIdx))
+		if _, err := os.Stat(src); err == nil {
+			_ = os.Rename(src, filepath.Join(stepsDir, fmt.Sprintf(".tmp_reindex_%d", remap[oldIdx])))
+		}
+	}
+	for _, oldIdx := range toMove {
+		newIdx := remap[oldIdx]
+		tmp := filepath.Join(stepsDir, fmt.Sprintf(".tmp_reindex_%d", newIdx))
+		if _, err := os.Stat(tmp); err == nil {
+			_ = os.Rename(tmp, filepath.Join(stepsDir, strconv.Itoa(newIdx)))
+		}
+	}
+}
+
+func pruneTranscriptSteps(brainDir, convID string, targetSet map[int]bool, remap map[int]int) error {
+	if brainDir == "" {
+		return nil
+	}
+	logsDir := filepath.Join(brainDir, convID, ".system_generated", "logs")
+	for _, name := range []string{"transcript.jsonl", "transcript_full.jsonl"} {
+		p := filepath.Join(logsDir, name)
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var out bytes.Buffer
+		anyChanged := false
+		sc := bufio.NewScanner(bytes.NewReader(data))
+		sc.Buffer(make([]byte, 64<<10), 64<<20)
+		for sc.Scan() {
+			trimmed := bytes.TrimSpace(sc.Bytes())
+			if len(trimmed) == 0 {
+				continue
+			}
+			var obj map[string]interface{}
+			if json.Unmarshal(trimmed, &obj) == nil {
+				if idxVal, ok := jsonInt(obj["step_index"]); ok {
+					if targetSet[idxVal] {
+						anyChanged = true
+						continue // drop deleted step completely
+					}
+					if newIdx, shifted := remap[idxVal]; shifted && newIdx != idxVal {
+						obj["step_index"] = newIdx
+						anyChanged = true
+						if enc, err := json.Marshal(obj); err == nil {
+							out.Write(enc)
+							out.WriteByte('\n')
+							continue
+						}
+					}
+				}
+			}
+			out.Write(trimmed)
+			out.WriteByte('\n')
+		}
+		if anyChanged {
+			tmp := p + ".tmp"
+			if err := os.WriteFile(tmp, out.Bytes(), 0o600); err == nil {
+				_ = os.Rename(tmp, p)
+			}
+		}
+	}
+	return nil
 }
 
 // DeleteArtifact deletes the artifact file (and companion .metadata.json / .resolved* files) inside brain/<convID>/
