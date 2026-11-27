@@ -155,7 +155,7 @@ object ChatFeedCache {
     val cache = ConcurrentHashMap<String, List<ChatFeedItem>>()
 
     fun getOrParse(msg: ChatMessage): List<ChatFeedItem> {
-        val cacheKey = "${msg.conversationId}:${msg.id}_${msg.content.hashCode()}_${msg.toolCalls.hashCode()}_${msg.thoughtText?.hashCode() ?: 0}_${msg.tokenUsage?.hashCode() ?: 0}"
+        val cacheKey = "${msg.conversationId}:${msg.id}_${msg.content.hashCode()}_${msg.editableText?.hashCode() ?: 0}_${msg.textSegments.hashCode()}_${msg.toolCalls.hashCode()}_${msg.thoughtText?.hashCode() ?: 0}_${msg.tokenUsage?.hashCode() ?: 0}"
         val cached = cache[cacheKey]
         if (cached != null) return cached
 
@@ -188,7 +188,7 @@ object ChatFeedCache {
                         val b = blocks[i]
                         if (b is MarkdownBlock.StepFooter) {
                             val seg = segByStep[b.stepIndex]
-                            if (seg != null && seg.text.isNotBlank()) {
+                            if (seg != null) {
                                 val segMsg = msg.copy(
                                     id = "${msg.id}_seg_${seg.stepIndex}",
                                     content = seg.text,
@@ -214,7 +214,7 @@ object ChatFeedCache {
                         ))
                     }
                 }
-                if (msg.content.isNotEmpty()) {
+                if (msg.content.isNotEmpty() || msg.editableStepIndex != null || msg.textSegments.isNotEmpty() || msg.toolCalls.isNotEmpty()) {
                     msgItems.add(ChatFeedItem.AssistantFooter(msg))
                 }
             }

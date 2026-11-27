@@ -134,6 +134,25 @@ func TestEditStepUserInputAndPlannerResponse(t *testing.T) {
 		strings.Contains(string(gotPlan), "stale modified response") {
 		t.Fatalf("unexpected planner payload after edit: %q", string(gotPlan))
 	}
+
+	// Clearing both user and assistant steps to empty string must succeed and preserve non-text metadata.
+	if err := EditStep(appDir, brainDir, convID, 0, "user", "", true); err != nil {
+		t.Fatalf("EditStep user empty: %v", err)
+	}
+	gotUserEmpty := readStepPayload(t, dbPath, 0)
+	if !strings.Contains(string(gotUserEmpty), hidden) || strings.Contains(string(gotUserEmpty), "updated visible prompt") {
+		t.Fatalf("unexpected user payload after clearing to empty: %q", string(gotUserEmpty))
+	}
+
+	if err := EditStep(appDir, brainDir, convID, 1, "assistant", "", false); err != nil {
+		t.Fatalf("EditStep assistant empty: %v", err)
+	}
+	gotPlanEmpty := readStepPayload(t, dbPath, 1)
+	if strings.Contains(string(gotPlanEmpty), "clean edited response") ||
+		!strings.Contains(string(gotPlanEmpty), "looping thought") ||
+		!strings.Contains(string(gotPlanEmpty), "read_file") {
+		t.Fatalf("unexpected planner payload after clearing to empty: %q", string(gotPlanEmpty))
+	}
 }
 
 func TestDeleteThinkingRemovesReasoningAndSyncsTranscript(t *testing.T) {

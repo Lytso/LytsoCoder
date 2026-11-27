@@ -534,6 +534,13 @@ fun UserMessageBubble(
                             }
                         }
                     }
+                } else if (audioAtts.isEmpty() && imageAtts.isEmpty() && docAtts.isEmpty() && !message.viaVoice) {
+                    Text(
+                        text = "Empty message",
+                        fontSize = 13.5.sp,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                    )
                 }
                 // what the voice said while handing the request to the agent
                 if (message.viaVoice && !message.voiceLine.isNullOrBlank()) {

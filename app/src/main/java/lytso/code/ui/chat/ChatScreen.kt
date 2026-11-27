@@ -3947,6 +3947,13 @@ fun ChatScreen(
                         value = draftText,
                         onValueChange = { draftText = it },
                         enabled = !isSavingInPlaceEdit,
+                        placeholder = {
+                            Text(
+                                text = "Leave empty to clear this message (slot stays editable)",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        },
                         minLines = 4,
                         maxLines = 12,
                         textStyle = LocalTextStyle.current.copy(fontSize = 13.5.sp, lineHeight = 19.sp),
@@ -3980,7 +3987,7 @@ fun ChatScreen(
                     }
                 } else {
                     Button(
-                        enabled = !isSavingInPlaceEdit && draftText.isNotBlank(),
+                        enabled = !isSavingInPlaceEdit,
                         onClick = {
                             isSavingInPlaceEdit = true
                             viewModel.editMessageInPlace(targetMsg, draftText.trim()) { _, _ ->
@@ -3999,7 +4006,7 @@ fun ChatScreen(
                 Row {
                     if (isUserMsg) {
                         TextButton(
-                            enabled = !isSavingInPlaceEdit && draftText.isNotBlank(),
+                            enabled = !isSavingInPlaceEdit,
                             onClick = {
                                 isSavingInPlaceEdit = true
                                 viewModel.editMessageInPlace(targetMsg, draftText.trim()) { _, _ ->

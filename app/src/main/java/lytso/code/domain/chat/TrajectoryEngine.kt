@@ -736,9 +736,10 @@ class TrajectoryEngine {
                     val toolCalls = mutableListOf<ToolCall>()
                     val contentParts = mutableListOf<String>()
                     val textSegments = mutableListOf<lytso.code.domain.model.AssistantTextSegment>()
-                    val lastTextBlock = turn.blocks.lastOrNull { it is TurnBlock.Text && it.markdown.isNotBlank() } as? TurnBlock.Text
+                    val lastTextBlock = turn.blocks.lastOrNull { it is TurnBlock.Text } as? TurnBlock.Text
 
-                    for (block in turn.blocks) {
+                    for ((blockIdx, block) in turn.blocks.withIndex()) {
+                        val isLastBlockInTurn = blockIdx == turn.blocks.lastIndex
                         when (block) {
                             is TurnBlock.Thinking -> {
                                 val thoughtText = block.thought.trim()
@@ -753,14 +754,17 @@ class TrajectoryEngine {
                                 }
                             }
                             is TurnBlock.Text -> {
-                                if (block.markdown.isNotBlank()) {
-                                    val cleanText = block.markdown.trim()
+                                val cleanText = block.markdown.trim()
+                                if (cleanText.isNotBlank()) {
                                     contentParts.add(cleanText)
-                                    textSegments.add(lytso.code.domain.model.AssistantTextSegment(stepIndex = block.stepIndex, text = cleanText))
-                                    // Emit an inline footer marker for beginning/middle replies so they get full Edit, Fork & Copy controls
-                                    if (lastTextBlock != null && block.stepIndex != lastTextBlock.stepIndex) {
-                                        contentParts.add("<!-- step_footer:${block.stepIndex} -->")
-                                    }
+                                } else {
+                                    contentParts.add("<!-- empty_reply:${block.stepIndex} -->")
+                                }
+                                textSegments.add(lytso.code.domain.model.AssistantTextSegment(stepIndex = block.stepIndex, text = cleanText))
+                                // Emit an inline footer for every text block that is not the final block of the turn
+                                // (including text blocks followed by tool calls, step groups, or another text block).
+                                if (!isLastBlockInTurn) {
+                                    contentParts.add("<!-- step_footer:${block.stepIndex} -->")
                                 }
                             }
                             is TurnBlock.Tool -> {
@@ -879,12 +883,14 @@ class TrajectoryEngine {
             val thinking = step.planner_response?.thinking
             val response = step.planner_response?.response
             val thinkingDurationMs = parseDurationToMillis(step.planner_response?.thinking_duration)
+            val hasToolCalls = !step.planner_response?.tool_calls.isNullOrEmpty()
+            val explicitlyEmpty = lytso.code.data.security.EditedEmptyStepsStore.isMarkedEmpty(conversationId, stepIndex)
 
             if (!thinking.isNullOrBlank()) {
                 blocks.add(TurnBlock.Thinking(stepIndex = stepIndex, thought = thinking, durationMs = thinkingDurationMs, isStreaming = isStreaming))
             }
-            if (!response.isNullOrBlank()) {
-                blocks.add(TurnBlock.Text(stepIndex = stepIndex, markdown = response, isStreaming = isStreaming))
+            if (!response.isNullOrBlank() || explicitlyEmpty || (!isStreaming && !hasToolCalls && thinking.isNullOrBlank())) {
+                blocks.add(TurnBlock.Text(stepIndex = stepIndex, markdown = response.orEmpty(), isStreaming = isStreaming))
             }
             return
         }

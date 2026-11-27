@@ -127,6 +127,8 @@ sealed class MarkdownBlock {
     @androidx.compose.runtime.Immutable
     data class StepFooter(val stepIndex: Int) : MarkdownBlock()
     @androidx.compose.runtime.Immutable
+    data class EmptyReply(val stepIndex: Int) : MarkdownBlock()
+    @androidx.compose.runtime.Immutable
     data class AgentError(
         val title: String = "Error",
         val userMessage: String = "",
@@ -217,6 +219,24 @@ fun MarkdownBlockView(
             )
         }
         is MarkdownBlock.StepFooter -> Unit
+        is MarkdownBlock.EmptyReply -> {
+            Surface(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+                border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+            ) {
+                Text(
+                    text = "Empty message",
+                    fontSize = 12.5.sp,
+                    fontStyle = FontStyle.Italic,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+        }
         is MarkdownBlock.AgentError -> {
             AgentErrorCard(error = block, modifier = modifier)
         }
@@ -2867,6 +2887,7 @@ private val ERROR_END_REGEX = Regex("<(?:!--\\s*)?/error(?:\\s*--)?>", RegexOpti
 private val TOOL_TAG_PATTERN = Regex("<\\s*(tool_call|execute_command|web_search|read_url|ask_choices|user_choice|tool_|execute_|web_|read_|ask_|user_)", RegexOption.IGNORE_CASE)
 private val TOOL_MARKER_REGEX = Regex("<!--\\s*tool_call:([a-zA-Z0-9_-]+)\\s*-->")
 private val STEP_FOOTER_MARKER_REGEX = Regex("^<!--\\s*step_footer:(\\d+)\\s*-->$")
+private val EMPTY_REPLY_MARKER_REGEX = Regex("^<!--\\s*empty_reply:(\\d+)\\s*-->$")
 private val UNIFIED_TOOL_REGEX = Regex("<tool_call\\s+name=[\"']?([a-zA-Z0-9_-]+)[\"']?\\s*>([\\s\\S]*?)</tool_call>", RegexOption.IGNORE_CASE)
 private val CHOICE_REGEX = Regex("<(ask_choices|user_choice)>([\\s\\S]*?)</(ask_choices|user_choice)>")
 private val EXEC_CMD_REGEX = Regex("<execute_command>([\\s\\S]*?)</execute_command>")
@@ -3045,6 +3066,16 @@ fun parseMarkdownBlocks(
             if (stepFooterMatch != null) {
                 stepFooterMatch.groupValues[1].toIntOrNull()?.let { sIdx ->
                     result.add(MarkdownBlock.StepFooter(sIdx))
+                }
+                i++
+                continue
+            }
+
+            // 0b. Explicitly cleared/empty assistant reply slot <!-- empty_reply:STEP_INDEX -->
+            val emptyReplyMatch = EMPTY_REPLY_MARKER_REGEX.find(line.trim())
+            if (emptyReplyMatch != null) {
+                emptyReplyMatch.groupValues[1].toIntOrNull()?.let { sIdx ->
+                    result.add(MarkdownBlock.EmptyReply(sIdx))
                 }
                 i++
                 continue

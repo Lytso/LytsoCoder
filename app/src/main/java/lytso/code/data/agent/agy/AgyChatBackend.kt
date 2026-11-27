@@ -161,6 +161,7 @@ class AgyChatBackend(
         // moving a model to another quota group, or switching the pill between 5h and 7d, updates the pill right away
         lytso.code.domain.model.ModelGroupPrefs.init(application)
         lytso.code.data.security.HiddenToolStepsStore.init(application)
+        lytso.code.data.security.EditedEmptyStepsStore.init(application)
         // The agy account changed (switched in Settings, the Agy Accounts mini app or a terminal): agy already uses the
         // new login, so ask it now instead of waiting for the next check. collectLatest: a burst becomes one check.
         backendScope.launch {
@@ -2079,9 +2080,29 @@ class AgyChatBackend(
                         if (!value.csrfToken.isNullOrBlank()) latestCsrf = value.csrfToken
                     } else {
                         // Clean rollback of the optimistic text in memory
+                        if (nextEdit.role == "assistant") {
+                            if (nextEdit.previousText.isBlank()) {
+                                lytso.code.data.security.EditedEmptyStepsStore.markEmpty(nextEdit.convId, nextEdit.stepIndex)
+                            } else {
+                                lytso.code.data.security.EditedEmptyStepsStore.clearStep(nextEdit.convId, nextEdit.stepIndex)
+                            }
+                        }
+                        val rollbackParentId = nextEdit.messageId.substringBefore("_seg_")
                         withContext(Dispatchers.Main) {
                             _messages.value = _messages.value.map { msg ->
-                                if (msg.id == nextEdit.messageId) msg.copy(content = nextEdit.previousText) else msg
+                                when {
+                                    msg.id == nextEdit.messageId && nextEdit.role == "user" ->
+                                        msg.copy(content = nextEdit.previousText, editableText = nextEdit.previousText)
+                                    msg.id == nextEdit.messageId || msg.id == rollbackParentId ->
+                                        msg.copy(
+                                            content = replaceAssistantStepContent(msg.content, nextEdit.stepIndex, nextEdit.newText, nextEdit.previousText),
+                                            textSegments = msg.textSegments.map { seg ->
+                                                if (seg.stepIndex == nextEdit.stepIndex) seg.copy(text = nextEdit.previousText) else seg
+                                            },
+                                            editableText = if (msg.editableStepIndex == nextEdit.stepIndex) nextEdit.previousText else msg.editableText
+                                        )
+                                    else -> msg
+                                }
                             }
                             lytso.code.ui.components.AppToastHelper.showToast(
                                 "Edit failed (reverted): ${res.exceptionOrNull()?.message ?: "I/O error"}",
@@ -2143,6 +2164,7 @@ class AgyChatBackend(
                         if (!value.csrfToken.isNullOrBlank()) latestCsrf = value.csrfToken
                         // Steps are now physically removed & compacted in SQLite; clear stale UI-hide indices
                         lytso.code.data.security.HiddenToolStepsStore.clearConversation(convId)
+                        lytso.code.data.security.EditedEmptyStepsStore.clearConversation(convId)
                     } else {
                         withContext(Dispatchers.Main) {
                             lytso.code.ui.components.AppToastHelper.showToast(
@@ -2223,21 +2245,31 @@ class AgyChatBackend(
         val stepIdx = message.editableStepIndex ?: message.stepIndex
             ?: return onDone(false, "No editable step index for this message")
         val role = if (message.role == MessageRole.USER) "user" else "assistant"
-        val previousText = message.content
+        val previousText = message.editableText ?: message.content
 
-        // Optimistic UI: update local message text immediately (supports both final replies and intermediate _seg_ replies)
+        if (message.role == MessageRole.ASSISTANT) {
+            if (newText.isBlank()) {
+                lytso.code.data.security.EditedEmptyStepsStore.markEmpty(conv.id, stepIdx)
+            } else {
+                lytso.code.data.security.EditedEmptyStepsStore.clearStep(conv.id, stepIdx)
+            }
+        }
+
+        // Optimistic UI: update local message text immediately without clobbering thoughts/tools/segments.
+        // Supports final replies, intermediate _seg_ replies, and blank <-> non-blank transitions.
         val parentId = message.id.substringBefore("_seg_")
-        val oldSegText = message.editableText?.takeIf { it.isNotBlank() } ?: message.content
         _messages.value = _messages.value.map { msg ->
             when {
-                msg.id == message.id -> msg.copy(content = newText, editableText = newText)
-                msg.id == parentId && oldSegText.isNotBlank() -> msg.copy(
-                    content = msg.content.replaceFirst(oldSegText, newText),
-                    textSegments = msg.textSegments.map { seg ->
-                        if (seg.stepIndex == stepIdx) seg.copy(text = newText) else seg
-                    },
-                    editableText = if (msg.editableStepIndex == stepIdx) newText else msg.editableText
-                )
+                msg.id == message.id && message.role == MessageRole.USER ->
+                    msg.copy(content = newText, editableText = newText)
+                msg.id == message.id || msg.id == parentId ->
+                    msg.copy(
+                        content = replaceAssistantStepContent(msg.content, stepIdx, previousText, newText),
+                        textSegments = msg.textSegments.map { seg ->
+                            if (seg.stepIndex == stepIdx) seg.copy(text = newText) else seg
+                        },
+                        editableText = if (msg.editableStepIndex == stepIdx) newText else msg.editableText
+                    )
                 else -> msg
             }
         }
@@ -2257,6 +2289,22 @@ class AgyChatBackend(
             )
         }
         scheduleBrainQueueDrain(debounceMs = 300L)
+    }
+
+    private fun replaceAssistantStepContent(
+        content: String,
+        stepIndex: Int,
+        oldText: String,
+        newText: String
+    ): String {
+        val replacement = newText.ifBlank { "<!-- empty_reply:$stepIndex -->" }
+        val emptyMarker = "<!-- empty_reply:$stepIndex -->"
+        return when {
+            content.contains(emptyMarker) -> content.replaceFirst(emptyMarker, replacement)
+            oldText.isNotBlank() && content.contains(oldText) -> content.replaceFirst(oldText, replacement)
+            content.isBlank() -> replacement
+            else -> content
+        }
     }
 
     /** Removes a reasoning/thinking block from SQLite/transcript via the serialized mutation queue. */
